@@ -9,14 +9,23 @@ use crate::types::{
 type Ring = Vec<[f64; 2]>;
 
 const ABBREVIATIONS: &[(&str, &str)] = &[
-    ("PK", "Park"), ("PG", "Playground"), ("PC", "Park Connector"), ("RD", "Road"),
-    ("AVE", "Avenue"), ("DR", "Drive"), ("JLN", "Jalan"), ("UPP", "Upper"),
-    ("BTWN", "between"), ("GDNS", "Gardens"), ("NTH", "North"), ("STH", "South"),
+    ("PK", "Park"),
+    ("PG", "Playground"),
+    ("PC", "Park Connector"),
+    ("RD", "Road"),
+    ("AVE", "Avenue"),
+    ("DR", "Drive"),
+    ("JLN", "Jalan"),
+    ("UPP", "Upper"),
+    ("BTWN", "between"),
+    ("GDNS", "Gardens"),
+    ("NTH", "North"),
+    ("STH", "South"),
     ("CTRL", "Central"),
 ];
 const ACRONYMS: &[&str] = &[
-    "AYE", "BKE", "CTE", "ECP", "KJE", "KPE", "MCE", "PIE", "SLE", "TPE", "MRT", "LRT",
-    "PUB", "SBG", "JLG", "YCK", "HDB", "NS", "EW",
+    "AYE", "BKE", "CTE", "ECP", "KJE", "KPE", "MCE", "PIE", "SLE", "TPE", "MRT", "LRT", "PUB",
+    "SBG", "JLG", "YCK", "HDB", "NS", "EW",
 ];
 const SMALL_WORDS: &[&str] = &["TO", "AND", "OF", "THE", "AT", "NEAR"];
 
@@ -38,7 +47,11 @@ pub fn format_park_name(raw: &str) -> String {
     while i < bytes.len() {
         let c = bytes[i] as char;
         if c == '(' || c == ')' {
-            if c == '(' { depth += 1; } else { depth = (depth - 1).max(0); }
+            if c == '(' {
+                depth += 1;
+            } else {
+                depth = (depth - 1).max(0);
+            }
             out.push(c);
             i += 1;
             continue;
@@ -62,7 +75,9 @@ pub fn format_park_name(raw: &str) -> String {
                 out.push_str(&token.to_lowercase());
                 continue;
             }
-            let has_vowel = upper.chars().any(|c| matches!(c, 'A' | 'E' | 'I' | 'O' | 'U'));
+            let has_vowel = upper
+                .chars()
+                .any(|c| matches!(c, 'A' | 'E' | 'I' | 'O' | 'U'));
             if ACRONYMS.contains(&upper.as_str()) || (depth > 0 && token.len() <= 3 && !has_vowel) {
                 out.push_str(&upper);
             } else {
@@ -83,7 +98,9 @@ const METRES_PER_DEGREE_LNG: f64 = 111_289.100_931_867_83;
 
 fn ring_area(ring: &Ring) -> f64 {
     let n = ring.len();
-    if n == 0 { return 0.0; }
+    if n == 0 {
+        return 0.0;
+    }
     let mut sum = 0.0;
     for i in 0..n {
         let j = (i + n - 1) % n;
@@ -94,8 +111,10 @@ fn ring_area(ring: &Ring) -> f64 {
 }
 
 fn polygon_area(rings: &[Ring]) -> f64 {
-    if rings.is_empty() { return 0.0; }
-    ring_area(&rings[0]) - rings[1..].iter().map(|hole| ring_area(hole)).sum::<f64>()
+    if rings.is_empty() {
+        return 0.0;
+    }
+    ring_area(&rings[0]) - rings[1..].iter().map(ring_area).sum::<f64>()
 }
 
 fn rings_from_value(value: &serde_json::Value) -> Vec<Ring> {
@@ -126,7 +145,12 @@ pub fn area_hectares(geometry: &crate::types::ParkGeometry) -> f64 {
         "MultiPolygon" => geometry
             .coordinates
             .as_array()
-            .map(|polys| polys.iter().map(|p| polygon_area(&rings_from_value(p))).sum())
+            .map(|polys| {
+                polys
+                    .iter()
+                    .map(|p| polygon_area(&rings_from_value(p)))
+                    .sum()
+            })
             .unwrap_or(0.0),
         _ => 0.0,
     };
@@ -135,7 +159,10 @@ pub fn area_hectares(geometry: &crate::types::ParkGeometry) -> f64 {
 
 fn format_hectares(hectares: f64) -> String {
     if hectares >= 10.0 {
-        format!("{} ha", crate::format::group_thousands(hectares.round() as i64))
+        format!(
+            "{} ha",
+            crate::format::group_thousands(hectares.round() as i64)
+        )
     } else {
         format!("{:.1} ha", hectares)
     }
@@ -164,34 +191,52 @@ pub fn describe_park_feature(feature: &ParkFeatureDetails<'_>) -> Vec<PopupLine>
     let mut lines = vec![PopupLine::new(&feature.name, "name")];
     match feature.kind {
         ParkFeatureKind::Park => {
-            lines.push(PopupLine::toned("Public park or nature area", "status", AvailabilityTone::Success));
-            if let Some(area) = feature.area_ha {
-                if area != 0.0 {
-                    lines.push(PopupLine::new(format!("About {}", format_hectares(area)), "count"));
-                }
+            lines.push(PopupLine::toned(
+                "Public park or nature area",
+                "status",
+                AvailabilityTone::Success,
+            ));
+            if let Some(area) = feature.area_ha
+                && area != 0.0
+            {
+                lines.push(PopupLine::new(
+                    format!("About {}", format_hectares(area)),
+                    "count",
+                ));
             }
         }
         ParkFeatureKind::Pcn => {
-            lines.push(PopupLine::toned("Walking, running and cycling path", "status", AvailabilityTone::Success));
-            lines.push(PopupLine::new("Part of the island-wide network linking parks together", "detail"));
+            lines.push(PopupLine::toned(
+                "Walking, running and cycling path",
+                "status",
+                AvailabilityTone::Success,
+            ));
+            lines.push(PopupLine::new(
+                "Part of the island-wide network linking parks together",
+                "detail",
+            ));
         }
         ParkFeatureKind::Trail => {
-            let text = if feature.cycle.unwrap_or(false) { "Walking and cycling" } else { "Walking only" };
+            let text = if feature.cycle.unwrap_or(false) {
+                "Walking and cycling"
+            } else {
+                "Walking only"
+            };
             lines.push(PopupLine::toned(text, "status", AvailabilityTone::Success));
             if let Some(t) = &feature.kind_type {
                 lines.push(PopupLine::new(t, "count"));
             }
-            if let Some(park) = &feature.park {
-                if park != &feature.name {
-                    lines.push(PopupLine::new(format!("In {}", park), "detail"));
-                }
+            if let Some(park) = &feature.park
+                && park != &feature.name
+            {
+                lines.push(PopupLine::new(format!("In {}", park), "detail"));
             }
         }
     }
-    if !feature.photos.is_empty() {
-        if let Some(credit) = crate::amenities::photo_credit(feature.photos) {
-            lines.push(PopupLine::new(credit, "hint"));
-        }
+    if !feature.photos.is_empty()
+        && let Some(credit) = crate::amenities::photo_credit(feature.photos)
+    {
+        lines.push(PopupLine::new(credit, "hint"));
     }
     lines.push(PopupLine::new("Source: NParks via data.gov.sg", "hint"));
     lines
@@ -218,7 +263,10 @@ fn bbox_center(coordinates: &serde_json::Value) -> Option<[f64; 2]> {
     fn visit(value: &serde_json::Value, bounds: &mut (f64, f64, f64, f64)) {
         let Some(arr) = value.as_array() else { return };
         if arr.first().and_then(serde_json::Value::as_f64).is_some() {
-            if let (Some(lng), Some(lat)) = (arr.first().and_then(serde_json::Value::as_f64), arr.get(1).and_then(serde_json::Value::as_f64)) {
+            if let (Some(lng), Some(lat)) = (
+                arr.first().and_then(serde_json::Value::as_f64),
+                arr.get(1).and_then(serde_json::Value::as_f64),
+            ) {
                 bounds.0 = bounds.0.min(lng);
                 bounds.1 = bounds.1.min(lat);
                 bounds.2 = bounds.2.max(lng);
@@ -226,7 +274,9 @@ fn bbox_center(coordinates: &serde_json::Value) -> Option<[f64; 2]> {
             }
             return;
         }
-        for child in arr { visit(child, bounds); }
+        for child in arr {
+            visit(child, bounds);
+        }
     }
     let mut bounds = (min_lng, min_lat, max_lng, max_lat);
     visit(coordinates, &mut bounds);
@@ -246,17 +296,16 @@ pub fn park_label_point(geometry: &crate::types::ParkGeometry) -> Option<[f64; 2
         "MultiPolygon" => geometry
             .coordinates
             .as_array()
-            .map(|p| p.iter().map(|poly| rings_from_value(poly)).collect())
+            .map(|p| p.iter().map(rings_from_value).collect())
             .unwrap_or_default(),
         _ => Vec::new(),
     };
     for rings in &polygons {
-        if let Some(outer) = rings.first() {
-            if point_in_ring(center, outer)
-                && !rings[1..].iter().any(|hole| point_in_ring(center, hole))
-            {
-                return Some(center);
-            }
+        if let Some(outer) = rings.first()
+            && point_in_ring(center, outer)
+            && !rings[1..].iter().any(|hole| point_in_ring(center, hole))
+        {
+            return Some(center);
         }
     }
     let mut best: Option<[f64; 2]> = None;
@@ -305,20 +354,53 @@ mod tests {
     #[test]
     fn format_park_names() {
         assert_eq!(format_park_name("ADMIRALTY PK"), "Admiralty Park");
-        assert_eq!(format_park_name("ISLAND GDNS WALK PG"), "Island Gardens Walk Playground");
-        assert_eq!(format_park_name("ANG MO KIO AVE 1 (CTE TO UPPER THOMSON)"), "Ang Mo Kio Avenue 1 (CTE to Upper Thomson)");
-        assert_eq!(format_park_name("ARMENIAN STREET (FCP)"), "Armenian Street (FCP)");
-        assert_eq!(format_park_name("PEARL'S HILL CITY PK"), "Pearl's Hill City Park");
-        assert_eq!(format_park_name("Bukit Timah PC (btwn King Albert Park - Adam Rd)"), "Bukit Timah Park Connector (between King Albert Park - Adam Road)");
+        assert_eq!(
+            format_park_name("ISLAND GDNS WALK PG"),
+            "Island Gardens Walk Playground"
+        );
+        assert_eq!(
+            format_park_name("ANG MO KIO AVE 1 (CTE TO UPPER THOMSON)"),
+            "Ang Mo Kio Avenue 1 (CTE to Upper Thomson)"
+        );
+        assert_eq!(
+            format_park_name("ARMENIAN STREET (FCP)"),
+            "Armenian Street (FCP)"
+        );
+        assert_eq!(
+            format_park_name("PEARL'S HILL CITY PK"),
+            "Pearl's Hill City Park"
+        );
+        assert_eq!(
+            format_park_name("Bukit Timah PC (btwn King Albert Park - Adam Rd)"),
+            "Bukit Timah Park Connector (between King Albert Park - Adam Road)"
+        );
     }
 
     #[test]
     fn area_and_label_point() {
-        let square = json!([[103.8,1.3],[103.8009,1.3],[103.8009,1.3009],[103.8,1.3009],[103.8,1.3]]);
-        let geom = crate::types::ParkGeometry { r#type: "Polygon".into(), coordinates: json!([square]) };
+        let square = json!([
+            [103.8, 1.3],
+            [103.8009, 1.3],
+            [103.8009, 1.3009],
+            [103.8, 1.3009],
+            [103.8, 1.3]
+        ]);
+        let geom = crate::types::ParkGeometry {
+            r#type: "Polygon".into(),
+            coordinates: json!([square]),
+        };
         assert!((area_hectares(&geom) - 0.99).abs() < 0.1);
-        let big = json!([[103.8,1.3],[103.81,1.3],[103.81,1.31],[103.8,1.31],[103.8,1.3]]);
-        let geom2 = crate::types::ParkGeometry { r#type: "Polygon".into(), coordinates: json!([big]) };
+        let big = json!([
+            [103.8, 1.3],
+            [103.81, 1.3],
+            [103.81, 1.31],
+            [103.8, 1.31],
+            [103.8, 1.3]
+        ]);
+        let geom2 = crate::types::ParkGeometry {
+            r#type: "Polygon".into(),
+            coordinates: json!([big]),
+        };
         let point = park_label_point(&geom2).unwrap();
         assert!((point[0] - 103.805).abs() < 1e-6);
         assert!((point[1] - 1.305).abs() < 1e-6);
@@ -327,17 +409,45 @@ mod tests {
     #[test]
     fn describes_park_and_search() {
         let d = ParkFeatureDetails {
-            kind: ParkFeatureKind::Park, name: "Bishan-Ang Mo Kio Park".into(),
-            area_ha: Some(62.4), ..Default::default()
+            kind: ParkFeatureKind::Park,
+            name: "Bishan-Ang Mo Kio Park".into(),
+            area_ha: Some(62.4),
+            ..Default::default()
         };
-        let texts: Vec<_> = describe_park_feature(&d).into_iter().map(|l| l.text).collect();
-        assert_eq!(texts, ["Bishan-Ang Mo Kio Park", "Public park or nature area", "About 62 ha", "Source: NParks via data.gov.sg"]);
+        let texts: Vec<_> = describe_park_feature(&d)
+            .into_iter()
+            .map(|l| l.text)
+            .collect();
+        assert_eq!(
+            texts,
+            [
+                "Bishan-Ang Mo Kio Park",
+                "Public park or nature area",
+                "About 62 ha",
+                "Source: NParks via data.gov.sg"
+            ]
+        );
         let parks = ParksGeoJson {
             r#type: "FeatureCollection".into(),
             features: vec![crate::types::ParkFeature {
                 r#type: "Feature".into(),
-                geometry: crate::types::ParkGeometry { r#type: "Polygon".into(), coordinates: json!([[[103.8,1.3],[103.81,1.3],[103.81,1.31],[103.8,1.3]]]) },
-                properties: crate::types::ParkProperties { kind: ParkFeatureKind::Park, name: "X Park".into(), park: None, kind_type: None, cycle: None, area_ha: Some(60.0) },
+                geometry: crate::types::ParkGeometry {
+                    r#type: "Polygon".into(),
+                    coordinates: json!([[
+                        [103.8, 1.3],
+                        [103.81, 1.3],
+                        [103.81, 1.31],
+                        [103.8, 1.3]
+                    ]]),
+                },
+                properties: crate::types::ParkProperties {
+                    kind: ParkFeatureKind::Park,
+                    name: "X Park".into(),
+                    park: None,
+                    kind_type: None,
+                    cycle: None,
+                    area_ha: Some(60.0),
+                },
             }],
         };
         assert_eq!(build_park_search_results(&parks).len(), 1);

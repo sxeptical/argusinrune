@@ -1,6 +1,6 @@
 //! Domain types ported from `types/index.ts`.
 //!
-//! Serde attributes mirror the JSON field names used by `public/*.json` and
+//! Serde attributes mirror the JSON field names used by `data/*.json` and
 //! the upstream APIs (camelCase for the static bundles, PascalCase for LTA).
 //! The original TypeScript `interface`/`type` names are preserved where Rust
 //! naming permits.
@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 
 pub type LngLat = [f64; 2];
 
-/// `MRTGeoJson` from types/index.ts (public/mrt-lines.json).
+/// `MRTGeoJson` (ported from types/index.ts; data/mrt-lines.json).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MrtGeoJson {
     pub r#type: String,
@@ -54,7 +54,7 @@ pub enum ParkFeatureKind {
     Trail,
 }
 
-/// `ParksGeoJson` from types/index.ts (public/parks-geometry.json).
+/// `ParksGeoJson` (ported from types/index.ts; data/parks-geometry.json).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ParksGeoJson {
     pub r#type: String,
@@ -307,10 +307,18 @@ pub struct PopupLine {
 
 impl PopupLine {
     pub fn new(text: impl Into<String>, kind: &str) -> Self {
-        Self { text: text.into(), kind: kind.into(), tone: None }
+        Self {
+            text: text.into(),
+            kind: kind.into(),
+            tone: None,
+        }
     }
     pub fn toned(text: impl Into<String>, kind: &str, tone: AvailabilityTone) -> Self {
-        Self { text: text.into(), kind: kind.into(), tone: Some(tone) }
+        Self {
+            text: text.into(),
+            kind: kind.into(),
+            tone: Some(tone),
+        }
     }
 }
 
@@ -420,7 +428,7 @@ pub struct HawkerCentre {
     pub status: HawkerStatus,
     pub expected_year: Option<i64>,
     pub photos: Vec<PlacePhoto>,
-    /// Joined at load from public/hawker-closures.json (empty in the raw bundle).
+    /// Joined at load from data/hawker-closures.json (empty in the raw bundle).
     #[serde(default)]
     pub closures: Vec<HawkerClosure>,
 }
@@ -825,7 +833,7 @@ impl AmenityType {
             AmenityType::School => "school",
         }
     }
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         Some(match s {
             "mall" => AmenityType::Mall,
             "hawker" => AmenityType::Hawker,

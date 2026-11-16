@@ -7,8 +7,8 @@
 //! `RUST_REWRITE.md` for the module map and data-loading approach.
 
 pub mod air_quality;
-pub mod amenity_layers;
 pub mod amenities;
+pub mod amenity_layers;
 pub mod api_types;
 pub mod bundle_validation;
 pub mod data;
@@ -30,4 +30,4 @@ pub mod search;
 pub mod signals;
 pub mod types;
 
-pub use model::{enabled_layer_labels, Layer, LayerId};
+pub use model::{Layer, LayerId, enabled_layer_labels};

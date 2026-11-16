@@ -234,9 +234,17 @@ pub struct LtaTrainAlert {
     pub status: Option<NumberOrString>,
     #[serde(rename = "Message", default, skip_serializing_if = "Option::is_none")]
     pub message: Option<Vec<MessageContent>>,
-    #[serde(rename = "AffectedSegments", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "AffectedSegments",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub affected_segments: Option<Vec<TrainAlertSegment>>,
-    #[serde(rename = "Start_time", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "Start_time",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub start_time: Option<String>,
     #[serde(rename = "End_time", default, skip_serializing_if = "Option::is_none")]
     pub end_time: Option<String>,
@@ -366,7 +374,11 @@ pub struct Pm25Data {
 pub struct Pm25Item {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<String>,
-    #[serde(rename = "updatedTimestamp", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "updatedTimestamp",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub updated_timestamp: Option<String>,
     pub readings: Pm25Readings,
 }
@@ -535,37 +547,47 @@ pub struct AviationStackResponse {
 /// sequence-based (de)serialisation matching the positional wire format.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct OpenSkyState {
-    pub icao24: Option<String>,          // 0
-    pub callsign: Option<String>,        // 1
-    pub origin_country: Option<String>,  // 2
-    pub time_position: Option<f64>,      // 3
-    pub last_contact: Option<f64>,       // 4
-    pub longitude: Option<f64>,          // 5
-    pub latitude: Option<f64>,           // 6
-    pub baro_altitude: Option<f64>,      // 7
-    pub on_ground: Option<bool>,         // 8
-    pub velocity: Option<f64>,           // 9
-    pub true_track: Option<f64>,         // 10
-    pub vertical_rate: Option<f64>,      // 11
+    pub icao24: Option<String>,             // 0
+    pub callsign: Option<String>,           // 1
+    pub origin_country: Option<String>,     // 2
+    pub time_position: Option<f64>,         // 3
+    pub last_contact: Option<f64>,          // 4
+    pub longitude: Option<f64>,             // 5
+    pub latitude: Option<f64>,              // 6
+    pub baro_altitude: Option<f64>,         // 7
+    pub on_ground: Option<bool>,            // 8
+    pub velocity: Option<f64>,              // 9
+    pub true_track: Option<f64>,            // 10
+    pub vertical_rate: Option<f64>,         // 11
     pub sensors: Option<serde_json::Value>, // 12
-    pub geo_altitude: Option<f64>,       // 13
-    pub squawk: Option<String>,          // 14
-    pub spi: Option<bool>,               // 15
-    pub position_source: Option<f64>,    // 16
-    pub category: Option<f64>,           // 17
+    pub geo_altitude: Option<f64>,          // 13
+    pub squawk: Option<String>,             // 14
+    pub spi: Option<bool>,                  // 15
+    pub position_source: Option<f64>,       // 16
+    pub category: Option<f64>,              // 17
 }
 
 impl<'de> Deserialize<'de> for OpenSkyState {
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let values = <Vec<Option<serde_json::Value>> as Deserialize>::deserialize(d)?;
         let get_str = |i: usize| -> Option<String> {
-            values.get(i).and_then(|v| v.as_ref()).and_then(|v| v.as_str()).map(str::to_string)
+            values
+                .get(i)
+                .and_then(|v| v.as_ref())
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
         };
         let get_f64 = |i: usize| -> Option<f64> {
-            values.get(i).and_then(|v| v.as_ref()).and_then(|v| v.as_f64())
+            values
+                .get(i)
+                .and_then(|v| v.as_ref())
+                .and_then(|v| v.as_f64())
         };
         let get_bool = |i: usize| -> Option<bool> {
-            values.get(i).and_then(|v| v.as_ref()).and_then(|v| v.as_bool())
+            values
+                .get(i)
+                .and_then(|v| v.as_ref())
+                .and_then(|v| v.as_bool())
         };
         Ok(OpenSkyState {
             icao24: get_str(0),

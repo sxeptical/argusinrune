@@ -16,10 +16,10 @@ const DATABASE_KEY: &str = "DATABASE_URL";
 
 /// Default config location, overridable with `ARGUS_CONFIG_FILE`.
 pub fn default_config_path() -> Option<PathBuf> {
-    if let Ok(path) = std::env::var("ARGUS_CONFIG_FILE") {
-        if !path.trim().is_empty() {
-            return Some(PathBuf::from(path));
-        }
+    if let Ok(path) = std::env::var("ARGUS_CONFIG_FILE")
+        && !path.trim().is_empty()
+    {
+        return Some(PathBuf::from(path));
     }
     dirs::home_dir().map(|home| home.join(".config").join("argus").join("config.toml"))
 }
@@ -34,19 +34,23 @@ pub struct ArgusConfig {
 }
 
 fn clean(value: Option<String>, placeholder: &str) -> Option<String> {
-    value.map(|v| v.trim().to_string()).filter(|v| {
-        !v.is_empty() && !v.to_ascii_lowercase().contains(placeholder)
-    })
+    value
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty() && !v.to_ascii_lowercase().contains(placeholder))
 }
 
 /// Look for a key at the top level or under `[api]` / `[keys]`.
 fn toml_string(root: &toml::Value, key: &str) -> Option<String> {
     let table = root.as_table()?;
-    for candidate in [Some(table), table.get("api").and_then(|v| v.as_table()), table.get("keys").and_then(|v| v.as_table())] {
-        if let Some(t) = candidate {
-            if let Some(v) = t.get(key).and_then(|v| v.as_str()) {
-                return Some(v.to_string());
-            }
+    for candidate in [
+        Some(table),
+        table.get("api").and_then(|v| v.as_table()),
+        table.get("keys").and_then(|v| v.as_table()),
+    ] {
+        if let Some(t) = candidate
+            && let Some(v) = t.get(key).and_then(|v| v.as_str())
+        {
+            return Some(v.to_string());
         }
     }
     None
@@ -87,7 +91,9 @@ impl ArgusConfig {
 
         let mut pick = |key: &str| -> Option<String> {
             get(key).filter(|v| !v.trim().is_empty()).or_else(|| {
-                file.as_ref().and_then(|v| toml_string(v, key)).filter(|v| !v.trim().is_empty())
+                file.as_ref()
+                    .and_then(|v| toml_string(v, key))
+                    .filter(|v| !v.trim().is_empty())
             })
         };
 
@@ -100,24 +106,30 @@ impl ArgusConfig {
     }
 
     pub fn lta_api_key(&self) -> Result<&str> {
-        self.lta_api_key.as_deref().ok_or_else(|| Error::NotConfigured {
-            service: "lta".into(),
-            message: "Missing or placeholder LTA_API_KEY".into(),
-        })
+        self.lta_api_key
+            .as_deref()
+            .ok_or_else(|| Error::NotConfigured {
+                service: "lta".into(),
+                message: "Missing or placeholder LTA_API_KEY".into(),
+            })
     }
 
     pub fn aviationstack_api_key(&self) -> Result<&str> {
-        self.aviationstack_api_key.as_deref().ok_or_else(|| Error::NotConfigured {
-            service: "aviationstack".into(),
-            message: "Missing AVIATIONSTACK_API_KEY".into(),
-        })
+        self.aviationstack_api_key
+            .as_deref()
+            .ok_or_else(|| Error::NotConfigured {
+                service: "aviationstack".into(),
+                message: "Missing AVIATIONSTACK_API_KEY".into(),
+            })
     }
 
     pub fn database_url(&self) -> Result<&str> {
-        self.database_url.as_deref().ok_or_else(|| Error::NotConfigured {
-            service: "feedback".into(),
-            message: "Missing DATABASE_URL".into(),
-        })
+        self.database_url
+            .as_deref()
+            .ok_or_else(|| Error::NotConfigured {
+                service: "feedback".into(),
+                message: "Missing DATABASE_URL".into(),
+            })
     }
 }
 
@@ -134,7 +146,10 @@ mod tests {
         );
         assert!(config.lta_api_key.is_none());
         assert!(config.aviationstack_api_key.is_none());
-        assert!(matches!(config.lta_api_key(), Err(Error::NotConfigured { .. })));
+        assert!(matches!(
+            config.lta_api_key(),
+            Err(Error::NotConfigured { .. })
+        ));
     }
 
     #[test]

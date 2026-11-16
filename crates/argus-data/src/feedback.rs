@@ -7,11 +7,7 @@
 //! (`scripts/sql/feedback.sql`). With no `DATABASE_URL`, submission returns a
 //! clear `NotConfigured` error and the source reports "unconfigured".
 
-use crate::{
-    Client, Result,
-    error::Error,
-    health::Source,
-};
+use crate::{Client, Result, error::Error, health::Source};
 
 pub const FEEDBACK_COUNTRY: &str = "SG";
 pub const FEEDBACK_MESSAGE_MAX_LENGTH: usize = 2000;
@@ -31,8 +27,13 @@ impl FeedbackSubmission {
                 message: "Feedback needs a rating from 1 to 5".into(),
             });
         }
-        let message = message.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
-        if message.as_ref().is_some_and(|s| s.chars().count() > FEEDBACK_MESSAGE_MAX_LENGTH) {
+        let message = message
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        if message
+            .as_ref()
+            .is_some_and(|s| s.chars().count() > FEEDBACK_MESSAGE_MAX_LENGTH)
+        {
             return Err(Error::BadRequest {
                 message: "Feedback comment is too long".into(),
             });

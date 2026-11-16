@@ -39,8 +39,16 @@ pub fn content_for(s: &AppState, target: &Target) -> Option<HoverContent> {
                 photos: place.photos().iter().map(|p| p.thumb.clone()).collect(),
             })
         }
-        Target::Park { name, kind: feature_kind } => {
-            let feature = s.static_data.as_ref()?.parks_geojson.features.iter()
+        Target::Park {
+            name,
+            kind: feature_kind,
+        } => {
+            let feature = s
+                .static_data
+                .as_ref()?
+                .parks_geojson
+                .features
+                .iter()
                 .find(|f| &f.properties.name == name)?;
             let p = &feature.properties;
             let photos = if *feature_kind == ParkFeatureKind::Park {
@@ -72,7 +80,9 @@ pub fn content_for(s: &AppState, target: &Target) -> Option<HoverContent> {
             let inc = snap.incidents.iter().find(|i| &i.id == id)?;
             let color = if inc.incident_type == "Accident" {
                 DANGER
-            } else if inc.incident_type == "Vehicle Breakdown" || inc.incident_type == "Heavy Traffic" {
+            } else if inc.incident_type == "Vehicle Breakdown"
+                || inc.incident_type == "Heavy Traffic"
+            {
                 WARNING
             } else {
                 MUTED
@@ -159,7 +169,9 @@ mod tests {
         let mut s = state();
         s.visibility.insert("incidents".into(), true);
         s.recompute();
-        let target = s.overlay_targets.iter()
+        let target = s
+            .overlay_targets
+            .iter()
             .find_map(|(_, t)| matches!(t, Target::Incident(_)).then_some(t.clone()))
             .expect("fixture has incidents");
         let content = content_for(&s, &target).expect("incident popup");
@@ -171,14 +183,27 @@ mod tests {
     #[test]
     fn amenity_popup_uses_core_descriptions_and_photos() {
         let s = state();
-        let id = s.registry.as_ref().unwrap().layers.iter()
+        let id = s
+            .registry
+            .as_ref()
+            .unwrap()
+            .layers
+            .iter()
             .find(|l| l.amenity_type == argus_core::types::AmenityType::Mall)
             .and_then(|l| l.places.first())
             .map(|p| p.id().to_string())
             .unwrap();
-        let target = Target::Amenity { kind: argus_core::types::AmenityType::Mall, id };
+        let target = Target::Amenity {
+            kind: argus_core::types::AmenityType::Mall,
+            id,
+        };
         let content = content_for(&s, &target).expect("mall popup");
         assert_eq!(content.title, "MALL");
-        assert!(content.lines.iter().any(|l| l.kind == "name" || l.kind == "count"));
+        assert!(
+            content
+                .lines
+                .iter()
+                .any(|l| l.kind == "name" || l.kind == "count")
+        );
     }
 }

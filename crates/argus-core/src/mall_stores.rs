@@ -9,30 +9,43 @@ fn text(value: Option<&str>) -> Option<String> {
         .filter(|s| !s.is_empty())
 }
 
-fn is_alnum(b: u8) -> bool { b.is_ascii_alphanumeric() }
+fn is_alnum(b: u8) -> bool {
+    b.is_ascii_alphanumeric()
+}
 
 /// URL-slug units into Singapore's `#level-unit` form.
 pub fn normalize_unit(raw: Option<&str>) -> Option<String> {
     let value = text(raw)?;
     let lower = value.to_ascii_lowercase();
     let mut s = lower.as_str();
-    if let Some(rest) = s.strip_prefix("unit-") { s = rest; }
+    if let Some(rest) = s.strip_prefix("unit-") {
+        s = rest;
+    }
     // Split at the first hyphen into group1 and group2.
-    let (g1, g2) = match s.find('-') { Some(i) => (&s[..i], &s[i + 1..]), None => return Some(value) };
+    let (g1, g2) = match s.find('-') {
+        Some(i) => (&s[..i], &s[i + 1..]),
+        None => return Some(value),
+    };
     // group1: (jp\d)?b?\d{1,2}
     let mut rest = g1;
     if let Some(r) = rest.strip_prefix("jp") {
-        let Some((digit, after)) = r.split_at_first_digit() else { return Some(value) };
+        let Some((digit, after)) = r.split_at_first_digit() else {
+            return Some(value);
+        };
         let _ = digit;
         rest = after;
     }
-    if let Some(r) = rest.strip_prefix('b') { rest = r; }
+    if let Some(r) = rest.strip_prefix('b') {
+        rest = r;
+    }
     if rest.is_empty() || rest.len() > 2 || !rest.bytes().all(|b| b.is_ascii_digit()) {
         return Some(value);
     }
     // group2: alnum segments separated by single hyphens.
     if g2.is_empty()
-        || g2.split('-').any(|seg| seg.is_empty() || !seg.bytes().all(is_alnum))
+        || g2
+            .split('-')
+            .any(|seg| seg.is_empty() || !seg.bytes().all(is_alnum))
     {
         return Some(value);
     }
@@ -53,7 +66,12 @@ impl SplitDigit for str {
 const MAX_LEVEL: i64 = 60;
 fn level_key(basement: bool, number: i64, mezzanine: bool) -> Option<String> {
     if (1..=MAX_LEVEL).contains(&number) {
-        Some(format!("{}{}{}", if basement { "B" } else { "L" }, number, if mezzanine { "M" } else { "" }))
+        Some(format!(
+            "{}{}{}",
+            if basement { "B" } else { "L" },
+            number,
+            if mezzanine { "M" } else { "" }
+        ))
     } else {
         None
     }
@@ -119,23 +137,34 @@ pub fn normalize_level(raw_level: Option<&str>, unit: Option<&str>) -> Option<St
         let upper = unit.to_ascii_uppercase();
         let mut rest = upper.strip_prefix('#').unwrap_or(&upper);
         if let Some(r) = rest.strip_prefix("JP") {
-            let Some((_, after)) = r.split_at_first_digit() else { return None };
+            let (_, after) = r.split_at_first_digit()?;
             rest = after;
         }
         // capture B?\d{1,2} then optional M then '-'
         let bytes = rest.as_bytes();
         let mut i = 0;
         let basement = bytes.first() == Some(&b'B');
-        if basement { i += 1; }
+        if basement {
+            i += 1;
+        }
         let digit_start = i;
-        while i < bytes.len() && bytes[i].is_ascii_digit() && i - digit_start < 2 { i += 1; }
+        while i < bytes.len() && bytes[i].is_ascii_digit() && i - digit_start < 2 {
+            i += 1;
+        }
         if i > digit_start && bytes.get(i) == Some(&b'-') {
             let mut token = rest[..i].to_string();
-            if basement { token = format!("B{}", token.trim_start_matches('B')); }
-            if let Some(key) = parse_level_token(&token) { return Some(key); }
-        } else if i > digit_start && bytes.get(i) == Some(&b'M') && bytes.get(i + 1) == Some(&b'-') {
+            if basement {
+                token = format!("B{}", token.trim_start_matches('B'));
+            }
+            if let Some(key) = parse_level_token(&token) {
+                return Some(key);
+            }
+        } else if i > digit_start && bytes.get(i) == Some(&b'M') && bytes.get(i + 1) == Some(&b'-')
+        {
             let token = format!("{}M", &rest[..i]);
-            if let Some(key) = parse_level_token(&token) { return Some(key); }
+            if let Some(key) = parse_level_token(&token) {
+                return Some(key);
+            }
         }
     }
     match level {
@@ -201,8 +230,10 @@ pub fn normalize_mall_name(name: &str) -> String {
     let mut chars = name.chars().peekable();
     while chars.peek().is_some() {
         if chars.peek() == Some(&'(') {
-            while let Some(c) = chars.next() {
-                if c == ')' { break; }
+            for c in chars.by_ref() {
+                if c == ')' {
+                    break;
+                }
             }
             continue;
         }
@@ -252,31 +283,43 @@ pub fn match_store_list_mall(
     if let Some(mall) = malls.iter().find(|m| normalize_mall_name(&m.name) == key) {
         return Some(mall.clone());
     }
-    let record = curated.iter().find(|info| normalize_mall_name(info.mall_name) == key);
-    if let Some(postcode) = record.and_then(|r| r.postal_code) {
-        if let Some(mall) = malls.iter().find(|m| m.address.as_deref().map_or(false, |a| a.contains(postcode))) {
-            return Some(mall.clone());
-        }
+    let record = curated
+        .iter()
+        .find(|info| normalize_mall_name(info.mall_name) == key);
+    if let Some(postcode) = record.and_then(|r| r.postal_code)
+        && let Some(mall) = malls
+            .iter()
+            .find(|m| m.address.as_deref().is_some_and(|a| a.contains(postcode)))
+    {
+        return Some(mall.clone());
     }
     if let (Some(lat), Some(lng)) = (
-        record.and_then(|r| r.latitude).and_then(|s| s.parse::<f64>().ok()),
-        record.and_then(|r| r.longitude).and_then(|s| s.parse::<f64>().ok()),
+        record
+            .and_then(|r| r.latitude)
+            .and_then(|s| s.parse::<f64>().ok()),
+        record
+            .and_then(|r| r.longitude)
+            .and_then(|s| s.parse::<f64>().ok()),
     ) {
         let nearest = malls
             .iter()
             .map(|m| (m, (m.lat - lat).hypot(m.lng - lng)))
             .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
-        if let Some((mall, distance)) = nearest {
-            if distance < 0.003 {
-                return Some(mall.clone());
-            }
+        if let Some((mall, distance)) = nearest
+            && distance < 0.003
+        {
+            return Some(mall.clone());
         }
     }
     let loose: Vec<_> = malls
         .iter()
         .filter(|m| without_suffix(&m.name) == without_suffix(list_name))
         .collect();
-    if loose.len() == 1 { Some(loose[0].clone()) } else { None }
+    if loose.len() == 1 {
+        Some(loose[0].clone())
+    } else {
+        None
+    }
 }
 
 // --------------------------------------------------------------------------- presentation
@@ -286,15 +329,22 @@ fn level_match(level: &str) -> Option<(char, i64, bool)> {
     if bytes.len() < 2 || (bytes[0] != b'B' && bytes[0] != b'L') {
         return None;
     }
-    let digits: String = level[1..].chars().take_while(|c| c.is_ascii_digit()).collect();
+    let digits: String = level[1..]
+        .chars()
+        .take_while(|c| c.is_ascii_digit())
+        .collect();
     let mezz = level.ends_with('M');
     let number: i64 = digits.parse().ok()?;
     Some((bytes[0] as char, number, mezz))
 }
 
 pub fn level_label(level: Option<&str>) -> String {
-    let Some(level) = level else { return "Level not listed".into() };
-    let Some((prefix, number, mezz)) = level_match(level) else { return level.into() };
+    let Some(level) = level else {
+        return "Level not listed".into();
+    };
+    let Some((prefix, number, mezz)) = level_match(level) else {
+        return level.into();
+    };
     format!(
         "{} {}{}",
         if prefix == 'B' { "Basement" } else { "Level" },
@@ -304,9 +354,17 @@ pub fn level_label(level: Option<&str>) -> String {
 }
 
 fn level_rank(level: Option<&str>) -> f64 {
-    let Some(level) = level else { return f64::INFINITY };
-    let Some((prefix, number, mezz)) = level_match(level) else { return 1_000.0 };
-    (if prefix == 'B' { -number as f64 } else { number as f64 }) + if mezz { 0.5 } else { 0.0 }
+    let Some(level) = level else {
+        return f64::INFINITY;
+    };
+    let Some((prefix, number, mezz)) = level_match(level) else {
+        return 1_000.0;
+    };
+    (if prefix == 'B' {
+        -number as f64
+    } else {
+        number as f64
+    }) + if mezz { 0.5 } else { 0.0 }
 }
 
 pub fn compare_levels(a: Option<&str>, b: Option<&str>) -> std::cmp::Ordering {
@@ -320,7 +378,12 @@ pub fn compare_stores(a: &MallStore, b: &MallStore) -> std::cmp::Ordering {
     a.name
         .to_lowercase()
         .cmp(&b.name.to_lowercase())
-        .then_with(|| a.unit.as_deref().unwrap_or("").cmp(b.unit.as_deref().unwrap_or("")))
+        .then_with(|| {
+            a.unit
+                .as_deref()
+                .unwrap_or("")
+                .cmp(b.unit.as_deref().unwrap_or(""))
+        })
 }
 
 #[derive(Clone, Debug, Default)]
@@ -331,15 +394,25 @@ pub struct StoreFilter<'a> {
 }
 
 pub fn filter_stores<'a>(stores: &'a [MallStore], filter: &StoreFilter<'_>) -> Vec<&'a MallStore> {
-    let needle = filter.query.trim().to_lowercase().trim_start_matches('#').to_string();
+    let needle = filter
+        .query
+        .trim()
+        .to_lowercase()
+        .trim_start_matches('#')
+        .to_string();
     stores
         .iter()
         .filter(|store| {
-            filter.category.map_or(true, |c| store.category.as_deref() == Some(c))
+            filter
+                .category
+                .is_none_or(|c| store.category.as_deref() == Some(c))
                 && (!filter.halal_only || store.halal)
                 && (needle.is_empty()
                     || store.name.to_lowercase().contains(&needle)
-                    || store.unit.as_deref().map_or(false, |u| u.to_lowercase().contains(&needle)))
+                    || store
+                        .unit
+                        .as_deref()
+                        .is_some_and(|u| u.to_lowercase().contains(&needle)))
         })
         .collect()
 }
@@ -366,7 +439,10 @@ pub fn group_stores_by_level(stores: &[MallStore]) -> Vec<StoreLevelGroup<'_>> {
     let mut groups: std::collections::BTreeMap<Option<&str>, Vec<&MallStore>> =
         std::collections::BTreeMap::new();
     for store in stores {
-        groups.entry(store.level.as_deref()).or_default().push(store);
+        groups
+            .entry(store.level.as_deref())
+            .or_default()
+            .push(store);
     }
     let mut entries: Vec<_> = groups.into_iter().collect();
     entries.sort_by(|(a, _), (b, _)| compare_levels(*a, *b));
@@ -374,7 +450,11 @@ pub fn group_stores_by_level(stores: &[MallStore]) -> Vec<StoreLevelGroup<'_>> {
         .into_iter()
         .map(|(level, mut items)| {
             items.sort_by(|a, b| compare_stores(a, b));
-            StoreLevelGroup { level, label: level_label(level), stores: items }
+            StoreLevelGroup {
+                level,
+                label: level_label(level),
+                stores: items,
+            }
         })
         .collect()
 }
@@ -389,29 +469,64 @@ mod tests {
         assert_eq!(normalize_unit(Some("unit-01-62-63")).unwrap(), "#01-62/63");
         assert_eq!(normalize_unit(Some("01-02-to-05")).unwrap(), "#01-02 TO 05");
         assert_eq!(normalize_unit(Some("b1-23")).unwrap(), "#B1-23");
-        assert_eq!(normalize_unit(Some("North Wing, #01-23")).unwrap(), "North Wing, #01-23");
+        assert_eq!(
+            normalize_unit(Some("North Wing, #01-23")).unwrap(),
+            "North Wing, #01-23"
+        );
         assert_eq!(normalize_unit(Some("  ")), None);
-        for raw in ["01", "L1", "Level 1", "Level 01", "South Wing, Level 1", "BLOCK D 01", "L1 OPEN PLAZA"] {
-            assert_eq!(normalize_level(Some(raw), None).unwrap(), "L1", "raw={}", raw);
+        for raw in [
+            "01",
+            "L1",
+            "Level 1",
+            "Level 01",
+            "South Wing, Level 1",
+            "BLOCK D 01",
+            "L1 OPEN PLAZA",
+        ] {
+            assert_eq!(
+                normalize_level(Some(raw), None).unwrap(),
+                "L1",
+                "raw={}",
+                raw
+            );
         }
         for raw in ["B1", "Basement 1", "Level B1", "North Wing, Basement 1"] {
-            assert_eq!(normalize_level(Some(raw), None).unwrap(), "B1", "raw={}", raw);
+            assert_eq!(
+                normalize_level(Some(raw), None).unwrap(),
+                "B1",
+                "raw={}",
+                raw
+            );
         }
         assert_eq!(normalize_level(Some("B2M"), None).unwrap(), "B2M");
         assert_eq!(normalize_level(None, Some("#B2-07")).unwrap(), "B2");
         assert_eq!(normalize_level(None, Some("#03-15/16")).unwrap(), "L3");
-        assert_eq!(normalize_level(Some("Tower 3"), Some("Suntec Tower 3")).unwrap(), "Tower 3");
+        assert_eq!(
+            normalize_level(Some("Tower 3"), Some("Suntec Tower 3")).unwrap(),
+            "Tower 3"
+        );
     }
 
     #[test]
     fn websites_and_store_rows() {
-        assert_eq!(normalize_website(Some("www.dbs.com.sg")).unwrap(), "https://www.dbs.com.sg/");
-        assert_eq!(normalize_website(Some("https://www.uniqlo.com/sg/")).unwrap(), "https://www.uniqlo.com/sg/");
+        assert_eq!(
+            normalize_website(Some("www.dbs.com.sg")).unwrap(),
+            "https://www.dbs.com.sg/"
+        );
+        assert_eq!(
+            normalize_website(Some("https://www.uniqlo.com/sg/")).unwrap(),
+            "https://www.uniqlo.com/sg/"
+        );
         assert_eq!(normalize_website(Some("javascript:alert(1)")), None);
         let row = RawStoreRow {
-            store_name: Some("  4Fingers  Crispy Chicken "), unit: Some("unit-b1-12"),
-            level: None, scope_of_business: None, raw_category: None, is_fnb: true,
-            is_halal: true, website: Some("https://www.4fingers.com.sg/"),
+            store_name: Some("  4Fingers  Crispy Chicken "),
+            unit: Some("unit-b1-12"),
+            level: None,
+            scope_of_business: None,
+            raw_category: None,
+            is_fnb: true,
+            is_halal: true,
+            website: Some("https://www.4fingers.com.sg/"),
         };
         let store = clean_store_row(&row).unwrap();
         assert_eq!(store.name, "4Fingers Crispy Chicken");
@@ -423,13 +538,34 @@ mod tests {
     #[test]
     fn presentation_sort_filter_group() {
         let store = |name: &str, level: Option<&str>, unit: Option<&str>| MallStore {
-            name: name.into(), unit: unit.map(str::to_string), level: level.map(str::to_string),
-            category: None, fnb: false, halal: false, website: None,
+            name: name.into(),
+            unit: unit.map(str::to_string),
+            level: level.map(str::to_string),
+            category: None,
+            fnb: false,
+            halal: false,
+            website: None,
         };
-        let stores = vec![store("Zara", Some("L2"), Some("#02-01")), store("a.p.c.", Some("B1"), Some("#B1-05"))];
+        let stores = vec![
+            store("Zara", Some("L2"), Some("#02-01")),
+            store("a.p.c.", Some("B1"), Some("#B1-05")),
+        ];
         assert_eq!(level_label(Some("B2M")), "Basement 2 Mezzanine");
         assert_eq!(group_stores_by_level(&stores).len(), 2);
-        assert_eq!(compare_levels(Some("B2"), Some("L1")), std::cmp::Ordering::Less);
-        assert_eq!(filter_stores(&stores, &StoreFilter { query: "zara", ..Default::default() }).len(), 1);
+        assert_eq!(
+            compare_levels(Some("B2"), Some("L1")),
+            std::cmp::Ordering::Less
+        );
+        assert_eq!(
+            filter_stores(
+                &stores,
+                &StoreFilter {
+                    query: "zara",
+                    ..Default::default()
+                }
+            )
+            .len(),
+            1
+        );
     }
 }

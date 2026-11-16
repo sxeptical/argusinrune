@@ -12,11 +12,7 @@ use argus_core::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    Client, Result,
-    error::Error,
-    health::Source,
-};
+use crate::{Client, Result, error::Error, health::Source};
 
 const BUSROUTER_ROUTES_URL: &str = "https://data.busrouter.sg/v1/routes.min.json";
 const BUSROUTER_ROUTES_FALLBACK_URL: &str =
@@ -105,7 +101,11 @@ pub fn decode_google_polyline(encoded: &str) -> Vec<LngLat> {
                 break;
             }
         }
-        let dlat = if result & 1 == 1 { !(result >> 1) } else { result >> 1 };
+        let dlat = if result & 1 == 1 {
+            !(result >> 1)
+        } else {
+            result >> 1
+        };
         lat += dlat;
 
         result = 0;
@@ -122,7 +122,11 @@ pub fn decode_google_polyline(encoded: &str) -> Vec<LngLat> {
                 break;
             }
         }
-        let dlng = if result & 1 == 1 { !(result >> 1) } else { result >> 1 };
+        let dlng = if result & 1 == 1 {
+            !(result >> 1)
+        } else {
+            result >> 1
+        };
         lng += dlng;
         coords.push([lng as f64 / 1e5, lat as f64 / 1e5]);
     }
@@ -193,8 +197,12 @@ fn project_stops_onto_path(path: &[LngLat], stops: &[BusRouteStop]) -> Vec<(usiz
         let mut nearest = (cursor, f64::INFINITY);
         let mut matched = None;
         for segment in cursor..path.len() - 1 {
-            let distance =
-                distance_to_segment_meters(stop.longitude, stop.latitude, path[segment], path[segment + 1]);
+            let distance = distance_to_segment_meters(
+                stop.longitude,
+                stop.latitude,
+                path[segment],
+                path[segment + 1],
+            );
             if distance < nearest.1 {
                 nearest = (segment, distance);
             }
@@ -217,8 +225,10 @@ fn start_loop_at_first_stop(path: Vec<LngLat>, stops: &[BusRouteStop]) -> Vec<Ln
         return path;
     };
     if path.len() < 3
-        || distance_meters([first.longitude, first.latitude], [last.longitude, last.latitude])
-            > LOOP_TERMINUS_RADIUS_M
+        || distance_meters(
+            [first.longitude, first.latitude],
+            [last.longitude, last.latitude],
+        ) > LOOP_TERMINUS_RADIUS_M
         || distance_meters(path[0], path[path.len() - 1]) > CLOSED_PATH_RADIUS_M
     {
         return path;
@@ -301,7 +311,10 @@ pub fn match_patterns_to_directions(
         return result;
     }
     for dir in directions {
-        let reversed: Vec<Vec<LngLat>> = patterns.iter().map(|p| p.iter().rev().copied().collect()).collect();
+        let reversed: Vec<Vec<LngLat>> = patterns
+            .iter()
+            .map(|p| p.iter().rev().copied().collect())
+            .collect();
         let fit = best_fit(patterns, dir.stops).or_else(|| best_fit(&reversed, dir.stops));
         if let Some(fit) = fit {
             result.insert(dir.direction, fit);
@@ -369,7 +382,10 @@ pub fn decode_geometry_index(body: &serde_json::Value) -> BusRouterGeometryIndex
 
 fn find_case_insensitive_key<V>(index: &HashMap<String, V>, service_no: &str) -> Option<String> {
     let lower = service_no.to_ascii_lowercase();
-    index.keys().find(|k| k.to_ascii_lowercase() == lower).cloned()
+    index
+        .keys()
+        .find(|k| k.to_ascii_lowercase() == lower)
+        .cloned()
 }
 
 #[derive(Clone, Debug)]
@@ -392,15 +408,16 @@ impl SelectedStop for Draft {
 
 impl Client {
     fn get_bus_routes_index(&self) -> Result<BusRoutesIndex> {
-        self.cache.get("bus-routes-index", BUS_ROUTES_CACHE_TTL_MS, || {
-            let rows = self.collect_lta_endpoint::<LtaBusRouteRow>(
-                "/BusRoutes",
-                BUS_ROUTES_PAGE_SIZE,
-                BUS_ROUTES_MAX_PAGES,
-                BUS_ROUTES_TIMEOUT_MS,
-            )?;
-            Ok(build_bus_routes_index(&rows))
-        })
+        self.cache
+            .get("bus-routes-index", BUS_ROUTES_CACHE_TTL_MS, || {
+                let rows = self.collect_lta_endpoint::<LtaBusRouteRow>(
+                    "/BusRoutes",
+                    BUS_ROUTES_PAGE_SIZE,
+                    BUS_ROUTES_MAX_PAGES,
+                    BUS_ROUTES_TIMEOUT_MS,
+                )?;
+                Ok(build_bus_routes_index(&rows))
+            })
     }
 
     fn fetch_busrouter_geometry(&self) -> Result<BusRouterGeometryIndex> {
@@ -414,10 +431,10 @@ impl Client {
                     BUSROUTER_GEOMETRY_TIMEOUT_MS,
                 )
                 .map(|body| decode_geometry_index(&body));
-            if let Ok(index) = decoded {
-                if !index.is_empty() {
-                    return Ok(index);
-                }
+            if let Ok(index) = decoded
+                && !index.is_empty()
+            {
+                return Ok(index);
             }
         }
         Err(Error::external(
@@ -429,10 +446,10 @@ impl Client {
 
     /// Fall back to stop chords and briefly cache geometry-source failures.
     fn get_busrouter_geometry_index(&self) -> BusRouterGeometryIndex {
-        if let Some(empty) = self
-            .cache
-            .peek::<BusRouterGeometryIndex>("busrouter-geometry-unavailable", BUSROUTER_GEOMETRY_NEGATIVE_TTL_MS)
-        {
+        if let Some(empty) = self.cache.peek::<BusRouterGeometryIndex>(
+            "busrouter-geometry-unavailable",
+            BUSROUTER_GEOMETRY_NEGATIVE_TTL_MS,
+        ) {
             return empty;
         }
         match self.cache.get(
@@ -453,7 +470,11 @@ impl Client {
         }
     }
 
-    pub fn get_bus_route(&self, service_no: &str, stop_id: Option<&str>) -> Result<BusRouteResponse> {
+    pub fn get_bus_route(
+        &self,
+        service_no: &str,
+        stop_id: Option<&str>,
+    ) -> Result<BusRouteResponse> {
         let result = self.build_bus_route(service_no, stop_id);
         self.finish(Source::BusRoutes, result)
     }
@@ -467,19 +488,19 @@ impl Client {
         let index = self.get_bus_routes_index()?;
         let mut service_key = normalized.to_string();
         let mut directions_map = index.get(normalized).cloned();
-        if directions_map.is_none() {
-            if let Some(matched) = find_case_insensitive_key(&index, normalized) {
-                service_key = matched.clone();
-                directions_map = index.get(&matched).cloned();
-            }
+        if directions_map.is_none()
+            && let Some(matched) = find_case_insensitive_key(&index, normalized)
+        {
+            service_key = matched.clone();
+            directions_map = index.get(&matched).cloned();
         }
-        let directions_map = directions_map
-            .filter(|m| !m.is_empty())
-            .ok_or_else(|| Error::external(
+        let directions_map = directions_map.filter(|m| !m.is_empty()).ok_or_else(|| {
+            Error::external(
                 "lta",
                 404,
                 format!("Bus service {normalized} was not found"),
-            ))?;
+            )
+        })?;
 
         let stops_catalog = self.get_bus_stops()?;
         let by_code: HashMap<&str, &argus_core::types::BusStop> = stops_catalog
@@ -489,7 +510,8 @@ impl Client {
         let context_stop = stop_id.map(str::trim).filter(|s| !s.is_empty());
 
         let mut drafts: Vec<Draft> = Vec::new();
-        let mut sorted_dirs: Vec<(&i64, &Vec<IndexedBusRouteStop>)> = directions_map.iter().collect();
+        let mut sorted_dirs: Vec<(&i64, &Vec<IndexedBusRouteStop>)> =
+            directions_map.iter().collect();
         sorted_dirs.sort_by_key(|(d, _)| **d);
         for (direction, indexed) in sorted_dirs {
             let mut joined = Vec::new();
@@ -552,12 +574,17 @@ impl Client {
         let patterns = geometry
             .get(&service_key)
             .or_else(|| geometry.get(normalized))
-            .or_else(|| find_case_insensitive_key(&geometry, &service_key).and_then(|k| geometry.get(&k)))
+            .or_else(|| {
+                find_case_insensitive_key(&geometry, &service_key).and_then(|k| geometry.get(&k))
+            })
             .cloned()
             .unwrap_or_default();
         let ref_dirs: Vec<DirectionStops<'_>> = shown
             .iter()
-            .map(|d| DirectionStops { direction: d.direction, stops: &d.stops })
+            .map(|d| DirectionStops {
+                direction: d.direction,
+                stops: &d.stops,
+            })
             .collect();
         let fits = match_patterns_to_directions(&patterns, &ref_dirs);
 
@@ -581,7 +608,10 @@ impl Client {
                 }
             })
             .collect();
-        Ok(BusRouteResponse { service_no: service_key, directions })
+        Ok(BusRouteResponse {
+            service_no: service_key,
+            directions,
+        })
     }
 }
 
@@ -624,8 +654,12 @@ mod tests {
     fn directions_leaving_stop_filters_and_keeps_all() {
         struct Dir(i64, Option<i64>, usize);
         impl SelectedStop for Dir {
-            fn selected_stop_index(&self) -> Option<i64> { self.1 }
-            fn stop_count(&self) -> usize { self.2 }
+            fn selected_stop_index(&self) -> Option<i64> {
+                self.1
+            }
+            fn stop_count(&self) -> usize {
+                self.2
+            }
         }
         let dirs = [Dir(1, Some(1), 3), Dir(2, None, 3), Dir(3, Some(2), 3)];
         let shown = directions_leaving_stop(&dirs);
@@ -644,18 +678,36 @@ mod tests {
             [103.82, 1.3001],
             [103.829, 1.3001],
         ]);
-        let west_stops = stops_at(&east_stops.iter().rev().map(|s| [s.longitude, s.latitude]).collect::<Vec<_>>());
+        let west_stops = stops_at(
+            &east_stops
+                .iter()
+                .rev()
+                .map(|s| [s.longitude, s.latitude])
+                .collect::<Vec<_>>(),
+        );
         let patterns = vec![west.clone(), east.clone()];
         let dirs = [
-            DirectionStops { direction: 1, stops: &east_stops },
-            DirectionStops { direction: 2, stops: &west_stops },
+            DirectionStops {
+                direction: 1,
+                stops: &east_stops,
+            },
+            DirectionStops {
+                direction: 2,
+                stops: &west_stops,
+            },
         ];
         let matched = match_patterns_to_directions(&patterns, &dirs);
         assert_eq!(matched.get(&1).unwrap().path, east);
         assert_eq!(matched.get(&2).unwrap().path, west);
 
         // Only one pattern: the other direction gets it reversed.
-        let one = match_patterns_to_directions(&[east.clone()], &[DirectionStops { direction: 2, stops: &west_stops }]);
+        let one = match_patterns_to_directions(
+            std::slice::from_ref(&east),
+            &[DirectionStops {
+                direction: 2,
+                stops: &west_stops,
+            }],
+        );
         let reversed: Vec<LngLat> = east.iter().rev().copied().collect();
         assert_eq!(one.get(&2).unwrap().path, reversed);
     }

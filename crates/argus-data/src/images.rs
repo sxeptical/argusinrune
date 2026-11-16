@@ -6,10 +6,10 @@
 //! guard every runtime request. Nothing here depends on Rune: the app calls
 //! [`Client::get_image_bytes`] from a `rune::Latest` worker closure.
 
+use crate::Client;
 use crate::error::{Error, Result};
 use crate::http::DEFAULT_TIMEOUT_MS;
 use crate::lta::is_safe_camera_url;
-use crate::Client;
 
 /// Hard cap on a single image response (LTA frames are ~160 KiB, Commons
 /// thumbnails ~40 KiB). Larger bodies are refused before they reach the UI.
@@ -48,7 +48,10 @@ impl Client {
         self.http().get_bytes_limited(
             "images",
             url,
-            &[("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8")],
+            &[(
+                "Accept",
+                "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+            )],
             DEFAULT_TIMEOUT_MS,
             MAX_IMAGE_BYTES,
         )
@@ -71,17 +74,25 @@ mod tests {
             "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/08/Park.jpg/500px-Park.jpg"
         ));
         assert!(is_allowed_image_url("HTTPS://UPLOAD.WIKIMEDIA.ORG/a.jpg"));
-        assert!(is_allowed_image_url("https://www.nea.gov.sg/images/hawker.jpg"));
-        assert!(!is_allowed_image_url("https://www.nea.gov.sg.evil.example/a.jpg"));
+        assert!(is_allowed_image_url(
+            "https://www.nea.gov.sg/images/hawker.jpg"
+        ));
+        assert!(!is_allowed_image_url(
+            "https://www.nea.gov.sg.evil.example/a.jpg"
+        ));
         assert!(!is_allowed_image_url("https://evil.example/1701.jpg"));
-        assert!(!is_allowed_image_url("http://images.data.gov.sg/insecure.jpg"));
+        assert!(!is_allowed_image_url(
+            "http://images.data.gov.sg/insecure.jpg"
+        ));
         assert!(!is_allowed_image_url("file:///etc/passwd"));
     }
 
     #[test]
     fn disallowed_url_is_forbidden_without_network() {
         let client = Client::new();
-        let err = client.get_image_bytes("https://evil.example/a.jpg").unwrap_err();
+        let err = client
+            .get_image_bytes("https://evil.example/a.jpg")
+            .unwrap_err();
         assert!(matches!(err, Error::Forbidden { .. }));
     }
 }

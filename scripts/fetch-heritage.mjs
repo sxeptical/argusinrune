@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * Authoring-time data pipeline (not run in CI or deployment). Builds the
- * static heritage bundle (public/heritage.json) from:
+ * static heritage bundle (data/heritage.json) from:
  *  - NHB Historic Sites (data.gov.sg, Singapore Open Data Licence): 100
  *    points, flat properties. DESCRIPTION is a historical blurb, HYPERLINK
  *    a roots.gov.sg article.
@@ -67,7 +67,7 @@ const applyCoordFix = (site) => {
 };
 
 async function fetchNhb(dataset, kind, idKey) {
-  const poll = await fetchJson(`https://api-open.data.gov.sg/v1/public/api/datasets/${dataset}/poll-download`);
+  const poll = await fetchJson(`https://api-open.data.gov.sg/v1/data/api/datasets/${dataset}/poll-download`);
   const url = poll?.data?.url;
   if (!url) throw new Error(`No presigned URL returned for ${dataset}`);
   const data = await fetchJson(url, { headers: { "User-Agent": USER_AGENT } });
@@ -209,8 +209,8 @@ for (const site of sites) {
 }
 
 const serialized = JSON.stringify(withPhotos);
-await mkdir("public", { recursive: true });
-await writeFile("public/heritage.json", serialized);
+await mkdir("data", { recursive: true });
+await writeFile("data/heritage.json", serialized);
 console.log(
   `Heritage bundle: ${sites.length} sites ` +
     `(${historic.sites.length} historic sites, ${monumentsResult.sites.length} monuments, ${museums.length} museums; ` +

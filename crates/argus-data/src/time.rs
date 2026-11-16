@@ -153,13 +153,11 @@ pub fn parse_timestamp(value: &str) -> Option<i64> {
     // Numeric offset, if present, converts the local time to UTC.
     if parts.len() >= 6 {
         let off = parts[5];
-        if off.starts_with('+') || off.starts_with('-') {
-            if off.len() >= 5 {
-                let oh: i64 = off[1..3].parse().ok()?;
-                let om: i64 = off[3..5].parse().ok()?;
-                let delta = oh * 3600 + om * 60;
-                secs += if off.starts_with('+') { -delta } else { delta };
-            }
+        if (off.starts_with('+') || off.starts_with('-')) && off.len() >= 5 {
+            let oh: i64 = off[1..3].parse().ok()?;
+            let om: i64 = off[3..5].parse().ok()?;
+            let delta = oh * 3600 + om * 60;
+            secs += if off.starts_with('+') { -delta } else { delta };
         }
     }
     Some(secs * 1000)

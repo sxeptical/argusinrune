@@ -15,13 +15,21 @@ pub struct Layer {
 
 impl Layer {
     pub fn new(id: impl Into<LayerId>, label: impl Into<String>) -> Self {
-        Self { id: id.into(), label: label.into(), visible: false }
+        Self {
+            id: id.into(),
+            label: label.into(),
+            visible: false,
+        }
     }
 }
 
 /// Return the labels of enabled layers, in declaration order.
 pub fn enabled_layer_labels(layers: &[Layer]) -> Vec<&str> {
-    layers.iter().filter(|l| l.visible).map(|l| l.label.as_str()).collect()
+    layers
+        .iter()
+        .filter(|l| l.visible)
+        .map(|l| l.label.as_str())
+        .collect()
 }
 
 #[cfg(test)]

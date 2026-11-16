@@ -1,210 +1,170 @@
 # ARGUS
 
-Singapore OSINT command center. Live transport, aviation, weather, cameras, and news on one tactical map.
+Singapore OSINT command center — a **native desktop app** built in Rust on the
+[Rune](https://github.com/anomalyco/rune) UI framework. Live transport,
+aviation, weather, cameras and news on one tactical map, with all API calls made
+directly from Rust. No browser, no Workers, no server-side proxy.
 
-https://www.argusint.live
-
-[![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=nextdotjs)](https://nextjs.org/)
-[![React](https://img.shields.io/badge/React-19-61dafb?logo=react&logoColor=111)](https://react.dev/)
-[![MapLibre](https://img.shields.io/badge/MapLibre-6.16-21b8a6)](https://maplibre.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-ready-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Vercel](https://img.shields.io/badge/Deploy-Vercel-black?logo=vercel)](https://vercel.com/)
-[![Bun](https://img.shields.io/badge/Bun-1.4-f9f1e1?logo=bun&logoColor=f472b6)](https://bun.sh/)
-
-ARGUS is a Singapore-focused intelligence dashboard built for fast situational awareness. It pulls live public and commercial feeds into a dense terminal-style interface: bus stops, bus arrival timings, MRT overlays, traffic cameras, weather/PSI, news, and live aircraft around Singapore airspace.
-
-It is designed as a single-page operations surface: map first, signal panels around it, and enough controls to hide noise when you only care about one layer.
-
-<img width="1894" height="1052" alt="image" src="https://github.com/user-attachments/assets/e2a33c21-72bd-4709-819e-d9d1305726e7" />
+![ARGUS live dashboard](docs/snaps/live.png)
 
 ---
 
-## What You Get
+## What it does
 
-### Live Map
+- **Custom dark map** of Singapore (Esri World Dark Gray raster tiles, optional
+  CARTO key) with drag-to-pan, wheel/pinch zoom, and overlaid sensors.
+- **Toggleable sensor layers**: flights (heading-aware markers), traffic
+  cameras, bus stops, MRT lines/stations, roads/incidents, carparks and EV
+  chargers, parks / park connectors / trails, and a dozen static amenity
+  datasets (hawkers, malls, gyms, schools, healthcare, heritage, hotels,
+  libraries, pharmacies, community clubs, supermarkets).
+- **Live feeds** (via `argus-data`): LTA bus stops/arrivals, cameras, incidents,
+  carparks, EV chargers and train alerts; data.gov.sg weather/PSI/PM2.5;
+  AviationStack flights with OpenSky fallback and last-good snapshot; ST/CNA
+  RSS news. Per-source health is shown in the Intel panel.
+- **Transit tools**: MRT route planner (Dijkstra over the station graph), bus
+  stop search with live arrivals and route geometry.
+- **Intel panel**: signals digest combining rail disruption, road incidents and
+  unhealthy PSI into in-app toasts, plus radius geo-filtering of map markers.
+- **Amenity details**: focus dialogs with photos, opening hours, closure dates,
+  and (for malls) a filterable store directory grouped by floor.
+- **Resilience**: per-key TTL cache with in-flight dedup and negative caching;
+  partial/per-feed failures never blank the dashboard; flight fallback chain
+  AviationStack → OpenSky → last good.
 
-- MapLibre dark map centered on Singapore.
-- Toggleable sensor layers for flights, road cameras, bus stops, and MRT.
-- Flight markers rendered as heading-aware airplane icons.
-- MRT line overlays with station points and labels.
-- Recreation layer with NParks parks, Park Connector Network, and walking trails.
-- Clickable bus stops for arrival timings.
-- Clickable road cameras for traffic image previews.
-
-### Sensor Grid
-
-- Air activity counts.
-- Road camera node counts.
-- Bus stop coverage.
-- MRT network visibility.
-- Quick ON/OFF controls for each map sensor.
-
-### Singapore Feeds
-
-- LTA bus stops and live bus arrivals.
-- LTA road traffic camera images.
-- LTA road incidents with type-colored map markers.
-- LTA carpark availability and EV charging points, colored by free lots / free connectors (fetched only while the layer is on).
-- Hawker centres (NEA via data.gov.sg) and shopping malls (OpenStreetMap, © OpenStreetMap contributors, ODbL; shop counts and nearest MRT from [curioputterings/singapore-mall-data](https://github.com/curioputterings/singapore-mall-data), CC BY 4.0). Static bundle in `public/amenities.json`, rebuilt with `bun scripts/fetch-amenities.mjs`.
-- Hawker centre cleaning/other-works closures (NEA via data.gov.sg, Singapore Open Data Licence), joined by hawker centre id and shown relative to today. Static bundle in `public/hawker-closures.json`, rebuilt with `bun scripts/fetch-hawker-closures.mjs`.
-- Gyms (All The Places, CC0; OpenStreetMap, © OpenStreetMap contributors, ODbL; SportSG sport facilities via data.gov.sg, Singapore Open Data Licence), grouped and filterable by operator brand (ActiveSG, Anytime Fitness, ...; others count as Independent). Static bundle in `public/gyms.json`, rebuilt with `bun scripts/fetch-gyms.mjs`.
-- Community clubs and PAssion WaVe outlets (People's Association via data.gov.sg, Singapore Open Data Licence), with Wikimedia Commons photos where the club has a Wikidata item. Static bundle in `public/community-clubs.json`, rebuilt with `bun scripts/fetch-community-clubs.mjs`.
-- Retail pharmacies (HSA via data.gov.sg, Singapore Open Data Licence). Static bundle in `public/pharmacies.json`, rebuilt with `bun scripts/fetch-pharmacies.mjs`.
-- Hotels (Hotels Licensing Board via data.gov.sg, Singapore Open Data Licence) with Wikimedia Commons photos where the hotel has a Wikidata item. Static bundle in `public/hotels.json`, rebuilt with `bun scripts/fetch-hotels.mjs`.
-- Heritage: NHB historic sites and national monuments (National Heritage Board via data.gov.sg, Singapore Open Data Licence; Roots.sg links when they resolve) plus OpenStreetMap museums (© OpenStreetMap contributors, ODbL), with Wikimedia Commons photos where the site has a Wikidata item. Static bundle in `public/heritage.json`, rebuilt with `bun scripts/fetch-heritage.mjs`.
-- Healthcare: MOH CHAS GP clinics (MOH via data.gov.sg, Singapore Open Data Licence; content as of 2021, with CHAS/CDMP/ISP scheme participation) plus OpenStreetMap hospitals and dental clinics (© OpenStreetMap contributors, ODbL), with Wikimedia Commons photos for hospitals that have a Wikidata item. Static bundle in `public/healthcare.json`, rebuilt with `bun scripts/fetch-healthcare.mjs`.
-- Libraries: NLB public libraries, National Library, and library@ kiosks (National Library Board via data.gov.sg, Singapore Open Data Licence; content as of 2019) plus OpenStreetMap branches that postdate it (Punggol Regional Library; © OpenStreetMap contributors, ODbL), with Wikimedia Commons photos where the branch has a Wikidata item. Static bundle in `public/libraries.json`, rebuilt with `bun scripts/fetch-libraries.mjs`.
-- Supermarkets (OpenStreetMap, © OpenStreetMap contributors, ODbL), grouped and filterable by operator brand (NTUC FairPrice, Sheng Siong, Giant, Cold Storage, Prime, Don Don Donki, Ang Mo, U Stars, Hao Mart, Scarlett, or Other). Static bundle in `public/supermarkets.json`, rebuilt with `bun scripts/fetch-supermarkets.mjs`.
-- Schools: MOE schools geocoded via OneMap name search with OpenStreetMap name-join fallback (Ministry of Education via data.gov.sg, Singapore Open Data Licence; OneMap coordinates under the OneMap Terms), grouped and filterable by level (Primary, Secondary, JC, Mixed), plus the autonomous universities and polytechnics (hand-curated list, one pin per main campus on a named OneMap building; filterable as University / Polytechnic). Static bundle in `public/schools.json`, rebuilt with `bun scripts/fetch-schools.mjs`.
-- Mall store directories (~8,900 shops in 55 malls, as listed by each mall operator) from the same curioputterings dataset, shown beside the mall details in the focus dialog that opens when a mall is selected: filter by name/unit, category or halal, grouped by floor. Per-mall files in `public/mall-stores/`, fetched when the dialog opens and rebuilt with `bun scripts/fetch-mall-stores.ts` (run it after `fetch-amenities.mjs`).
-- Park photos from Wikimedia Commons, credited per file, in `public/park-photos.json`, rebuilt with `bun scripts/fetch-park-photos.mjs`.
-- LTA train service alerts, with disrupted MRT lines highlighted on the map.
-- Intelligence panel live signals digest combining disrupted rail, road incidents, and unhealthy PSI alerts.
-- Notifications for new rail disruptions, road accidents, and unhealthy PSI, as in-app toasts plus optional browser alerts while the tab is in the background. Nothing is delivered once the tab is closed.
-- Data.gov.sg weather, PSI, and air temperature.
-- Aviationstack flights for Singapore airports, with OpenSky fallback.
-- Singapore news feed merge from public RSS sources.
-
-### Resilience
-
-- API route rate limiting (per-IP sliding window, in-memory).
-- In-memory caching for expensive calls.
-- Partial page loading so one failed API does not blank the dashboard.
-- Flight fallback chain: Aviationstack -> OpenSky -> latest successful snapshot.
+Data credits: LTA DataMall, data.gov.sg (Singapore Open Data Licence), NParks,
+AviationStack, OpenSky, OpenStreetMap contributors (ODbL), Wikimedia Commons,
+NEA, HSA, NLB, NHB, MOE, PA, SportSG, and
+[curioputterings/singapore-mall-data](https://github.com/curioputterings/singapore-mall-data)
+(CC BY 4.0). Each source is credited in the UI where its data appears.
 
 ---
 
-## Quick Start
+## Requirements
 
-Requires [Bun](https://bun.sh) 1.4 or later. Install from bun.sh — the `packageManager` field is informational and does not auto-install via Corepack.
-
-```bash
-# 1. Clone the repo
-git clone https://github.com/sxeptical/ARGUS.git
-cd ARGUS
-
-# 2. Install dependencies
-bun install
-
-# 3. Add environment variables
-cp .env.example .env.local
-
-# 4. Start the dev server
-bun run dev
-```
-
-Open `http://localhost:3000`.
+- **Rust 1.99.1** — pinned in `rust-toolchain.toml`; `rustup` picks it up
+  automatically. Install with
+  `rustup toolchain install 1.99.1 --profile minimal --component clippy,rustfmt`.
+- **Edition 2024**, Cargo resolver 3. `clippy` and `rustfmt` are needed for CI.
+- **Platforms**: macOS, Windows and Linux (Rune's supported native targets).
+  A GPU (or a software adapter) is needed for the window; headless rendering
+  works without a display.
+  - On Debian/Ubuntu, install Rune's keyboard dependency:
+    `sudo apt-get install -y libxkbcommon-dev libxkbcommon0`.
+- Rune is a git dependency pinned to a dev rev; the first build fetches it and
+  repeats the five `[patch.crates-io]` entries declared in `Cargo.toml`. Keep
+  all six revs in sync when upgrading (see `docs/ARCHITECTURE.md`).
 
 ---
 
-## API Keys
+## Configuration
 
-ARGUS can run with partial data, but the best experience needs these keys:
+Copy `.env.example` to `.env` in the working directory and fill in the keys you
+need. Process environment variables take precedence over `.env`; an optional
+`~/.config/argus/config.toml` (or `ARGUS_CONFIG_FILE`) is the lowest-precedence
+source. Missing or placeholder keys simply mark that feed "unconfigured" — the
+app still runs with the remaining sources.
 
-| Key | Required For | Notes |
-| --- | --- | --- |
-| `LTA_API_KEY` | Bus stops, bus arrivals, traffic cameras, road incidents, carparks, EV chargers | Get this from Singapore LTA DataMall. |
-| `AVIATIONSTACK_API_KEY` | Primary flight feed | Used for live flights around Changi/Seletar. |
-| `DATABASE_URL` | Feedback form (shown to visitors in Singapore) | Neon Postgres connection string. Create the table with `psql "$DATABASE_URL" -f scripts/sql/feedback.sql`. Set `ARGUS_DEV_COUNTRY=SG` to see the form locally. |
-
-Example:
-
-```env
-LTA_API_KEY=your_lta_datamall_key
-AVIATIONSTACK_API_KEY=your_aviationstack_key
-```
-
-Weather and news currently use public endpoints and do not require keys.
-
----
-
-## Data Sources
-
-| Source | Used For |
+| Variable | Purpose |
 | --- | --- |
-| LTA DataMall | Bus stops, bus arrivals, traffic cameras |
-| Data.gov.sg | Weather forecast, PSI, temperature |
-| Aviationstack | Live commercial flight data |
-| OpenSky Network | Flight fallback when Aviationstack is unavailable |
-| The Straits Times RSS | Singapore headlines |
-| CNA RSS | Singapore headlines |
-| NParks Parks and Nature Reserves (data.gov.sg) | Park boundary polygons (Singapore Open Data Licence) |
-| NParks Park Connector Loop (data.gov.sg) | Park Connector Network lines (Singapore Open Data Licence) |
-| NParks Tracks (data.gov.sg) | Walking and hiking trails (Singapore Open Data Licence) |
+| `LTA_API_KEY` | LTA DataMall: buses, cameras, incidents, carparks, EV, train alerts |
+| `AVIATIONSTACK_API_KEY` | Primary flight feed (falls back to keyless OpenSky) |
+| `DATABASE_URL` | Optional Neon Postgres string for the feedback form; create the table with `psql "$DATABASE_URL" -f scripts/sql/feedback.sql` |
+| `ARGUS_DATA_DIR` | Static JSON bundle directory (default: `<repo>/data`) |
+| `ARGUS_CONFIG_FILE` | Override for the optional TOML config path |
+| `ARGUS_CONFIG_DIR` | Override for saved UI preferences (default `~/.config/argus`) |
+| `ARGUS_CACHE_DIR` | Override for the map tile disk cache |
+| `ARGUS_CARTO_KEY` | Optional key for CARTO dark basemap tiles (Esri is keyless) |
+
+**Never commit `.env` or real keys** — `.env*` is gitignored, except
+`.env.example`.
 
 ---
 
-## Project Structure
+## Build and run
 
-```text
-app/
-  api/                 Next.js route handlers for live data
-  components/          Dashboard panels, MapLibre map, and dashboard/ subpanels
-  hooks/               Dashboard data, state, route, history, and MRT state
-  page.tsx             Thin command-center composition (logic in hooks/)
-lib/
-  api-clients/         Typed HTTP clients split by source/domain
-  cache.ts             In-memory TTL cache
-  map-geometry.ts      Pure GeoJSON builders for bus/MRT overlays
-  mrt-network.ts       Single source of truth for MRT stations
-  mrt-routing.ts       MRT route planning (Dijkstra + binary heap)
-  rate-limit.ts        Lightweight API route rate limiting
-public/
-  mrt-lines.json       MRT line geometry
-types/
-  schemas.ts           Runtime schemas and schema-derived contracts
-  index.ts             Client-facing domain contracts
+```sh
+cargo run -p argus-app --release          # launch the desktop window
+cargo build --workspace                   # build everything
+cargo test --workspace                    # unit + integration tests (live tests ignored)
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+```
+
+### Headless scenes and snaps
+
+Rune renders every app headlessly with the same renderer. Release builds keep
+the tooling because `argus-app` enables Rune's `tooling` feature.
+
+```sh
+cargo run -p argus-app -- --list-scenes
+cargo run -p argus-app -- --snap docs/snaps/dashboard.png --scene dashboard
+cargo run -p argus-app -- --tree out/tree.json --scene panels
+```
+
+Common flags: `--snap out.png [--scene NAME] [--at T] [--size WxH] [--scale N]
+[--theme dark|light]`, `--tree out.json`, `--script script.json`,
+`--list-scenes`. `--snap` writes at 2× scale by default. Available scenes
+include `dashboard`, `layers-on`, `route-planner`, `poi-dialog`,
+`mall-directory`, `photo-gallery`, `hover-popup`, `panels`, `live`, `cameras`,
+`camera-dialog` and `loading`. Checked-in renders live in `docs/snaps/`; the
+`live` scene preloads real network data, the others use deterministic fixtures.
+
+### Live smoke tests
+
+The network-dependent tests are `#[ignore]` by default so CI stays offline:
+
+```sh
+cargo test -p argus-data --test live_smoke -- --ignored --nocapture --test-threads=1
 ```
 
 ---
 
-## Commands
+## Static data and regeneration
 
-```bash
-bun run dev      # Start local development
-bun run build    # Production build
-bun run start    # Start production server
-bun run preview  # Build and run in the Workers runtime locally
-bun run deploy   # Build and deploy to Cloudflare Workers
-bun run upload   # Build and upload a new Worker version
-bun run cf-typegen # Regenerate binding types from wrangler.jsonc
-bun run lint     # ESLint
-bun run test     # Unit and regression tests
-bun run typecheck # Native TypeScript 7 check
-bun run verify   # Typecheck, lint, test, and production build
+The JSON bundles the app loads are checked in under `data/` (loaded via
+`argus-core::data::DataDir`; override with `ARGUS_DATA_DIR`). The `scripts/`
+directory holds Node `.mjs` authoring pipelines that rebuild them from public
+sources. They use only Node built-ins — no `node_modules` or `package.json` is
+needed — but **require network access** and write into `data/`:
+
+```sh
+node scripts/fetch-amenities.mjs
+node scripts/fetch-hawker-closures.mjs   # after fetch-amenities
+node scripts/fetch-parks.mjs
+node scripts/fetch-park-photos.mjs
+node scripts/fetch-gyms.mjs
+# ...and the other fetch-*.mjs scripts
+node scripts/apply-photo-picks.mjs       # reapply reviewed picks without refetching
 ```
 
----
-
-## Deploying to Cloudflare Workers
-
-The app builds with OpenNext (`open-next.config.ts`, `wrangler.jsonc`). All
-pages are dynamic, so no R2/D1/KV cache resources are required.
-
-```bash
-cp .dev.vars.example .dev.vars   # local preview only; fill in keys
-bun run preview
-bunx wrangler secret put LTA_API_KEY
-bunx wrangler secret put AVIATIONSTACK_API_KEY   # optional
-bunx wrangler secret put DATABASE_URL            # feedback form
-bun run deploy
-```
-
-`wrangler.jsonc` sets `ARGUS_TRUST_PROXY_HEADERS=true` because Cloudflare
-overwrites `cf-connecting-ip` with the real peer address. Rate limits use the
-native Workers Rate Limiting binding (shared per Cloudflare location); the
-`namespace_id` values must be unique within the account. On Workers, marked
-upstream caches also use the Cache API as a colo-local L2 behind the in-memory
-L1 cache. `bun run cf-typegen` writes a reference file under `.wrangler/`; the
-committed `cloudflare-env.d.ts` is a trimmed, typecheck-safe version.
+Upstream/download failures are reported per script (HTTP errors mean an
+upstream URL or dataset id needs refreshing); the checked-in bundles are
+committed so the app works without running these. The reviewed photo picks live
+in `scripts/data/photo-picks.json`, and the feedback SQL table is in
+`scripts/sql/feedback.sql`.
 
 ---
 
-## Notes
+## Architecture
 
-- Flight direction is best-effort. Aviationstack airport metadata is used when available; otherwise heading relative to Changi is used.
-- Serverless memory is not guaranteed across Vercel invocations, so cached fallbacks help during warm periods but should not be treated as durable storage.
-- The bundled cache and rate limiter have an in-memory L1. **On Vercel, each serverless instance still has its own state** — limits are not shared across instances or cold starts; use Vercel Firewall, an edge KV store, or Redis for hard cross-instance limits. On Cloudflare Workers the native Rate Limiting binding shares limits across isolates in a location, and the Cache API provides a colo-local L2 for public upstream data. On Vercel (`VERCEL=1`) the IP extractor trusts `x-vercel-forwarded-for`, which the edge overwrites. Self-hosted deployments ignore that header unless `ARGUS_TRUST_PROXY_HEADERS=true` is set behind a trusted proxy.
-- API rate limits matter. Flight polling is the most likely source of quota pressure.
+Workspace crates (see `docs/ARCHITECTURE.md` for the full notes, module map and
+Rune API reference):
+
+- **`argus-core`** — domain types, pure logic, bundle validators and the
+  `DataDir`/`StaticData` loaders. No UI and no network dependencies.
+- **`argus-data`** — `reqwest::blocking` clients per upstream, TTL cache,
+  config/keys, feedback and source health. Depends on `argus-core`, never Rune.
+- **`argus-map`** — Mercator camera, raster tile store, overlays/hit-testing and
+  the Rune `map_view`. Defines its own small view types; no `argus-core` dep.
+- **`argus-app`** — the `argus` binary: `AppSpec` wiring, state/reducers,
+  feed polling through Rune `Latest`, panels, dialogs and headless scenes.
+
+Dependency direction: `argus-app → {argus-core, argus-data, argus-map, rune}`;
+`argus-data → argus-core`; `argus-map` is independent of the other two crates.
 
 ---
+
+## License
+
+MIT — see [LICENSE](LICENSE). Rune is MIT, © Anomaly.

@@ -19,7 +19,10 @@ const MAX_RSS_BYTES: usize = 512 * 1024;
 const NEWS_TTL: Duration = Duration::from_secs(15 * 60);
 
 const FEEDS: &[(&str, &str)] = &[
-    ("The Straits Times", "https://www.straitstimes.com/news/singapore/rss.xml"),
+    (
+        "The Straits Times",
+        "https://www.straitstimes.com/news/singapore/rss.xml",
+    ),
     (
         "CNA",
         "https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml",
@@ -39,7 +42,10 @@ pub struct NewsItemWithCategories {
 
 fn entity_replacer(caps: &regex::Captures<'_>) -> String {
     let entity = caps.get(1).map(|m| m.as_str()).unwrap_or_default();
-    if let Some(hex) = entity.strip_prefix("#x").or_else(|| entity.strip_prefix("#X")) {
+    if let Some(hex) = entity
+        .strip_prefix("#x")
+        .or_else(|| entity.strip_prefix("#X"))
+    {
         return u32::from_str_radix(hex, 16)
             .ok()
             .and_then(char::from_u32)
@@ -76,19 +82,23 @@ pub fn decode_html_entities(text: &str) -> String {
     let cdata = Regex::new(r"(?s)<!\[CDATA\[([\s\S]*?)\]\]>").unwrap();
     let entities = Regex::new(r"(?i)&(#\d+|#x[0-9a-f]+|[a-z]+);").unwrap();
     let unwrapped = cdata.replace_all(text, "$1");
-    entities.replace_all(&unwrapped, entity_replacer).into_owned()
+    entities
+        .replace_all(&unwrapped, entity_replacer)
+        .into_owned()
 }
 
 fn strip_html_tags(text: &str) -> String {
-    Regex::new(r"<[^>]*>").unwrap().replace_all(text, "").trim().to_string()
+    Regex::new(r"<[^>]*>")
+        .unwrap()
+        .replace_all(text, "")
+        .trim()
+        .to_string()
 }
 
 /// Read a tag, tolerating attributes and namespaces (`<dc:date>`, etc.).
 pub fn extract_rss_tag(xml: &str, tag: &str) -> String {
     let escaped = regex::escape(tag);
-    let pattern = format!(
-        r"(?i)<(?:\w+:)?{escaped}(?:\s[^>]*)?>([\s\S]*?)</(?:\w+:)?{escaped}>"
-    );
+    let pattern = format!(r"(?i)<(?:\w+:)?{escaped}(?:\s[^>]*)?>([\s\S]*?)</(?:\w+:)?{escaped}>");
     if let Some(caps) = Regex::new(&pattern).unwrap().captures(xml) {
         return strip_html_tags(&decode_html_entities(&caps[1]));
     }
@@ -105,7 +115,8 @@ pub fn extract_rss_tag(xml: &str, tag: &str) -> String {
 }
 
 pub fn extract_rss_categories(xml: &str) -> Vec<String> {
-    let re = Regex::new(r"(?is)<(?:\w+:)?category(?:\s[^>]*)?>([\s\S]*?)</(?:\w+:)?category>").unwrap();
+    let re =
+        Regex::new(r"(?is)<(?:\w+:)?category(?:\s[^>]*)?>([\s\S]*?)</(?:\w+:)?category>").unwrap();
     re.captures_iter(xml)
         .filter_map(|caps| {
             let value = strip_html_tags(&decode_html_entities(&caps[1]));
@@ -133,7 +144,11 @@ pub fn parse_rss_items(xml: &str, source: &str) -> Vec<ParsedRssItem> {
             let title = extract_rss_tag(item, "title");
             let link = {
                 let l = extract_rss_tag(item, "link");
-                if l.is_empty() { extract_rss_tag(item, "guid") } else { l }
+                if l.is_empty() {
+                    extract_rss_tag(item, "guid")
+                } else {
+                    l
+                }
             };
             let published = ["pubDate", "pubdate", "updated", "published", "date"]
                 .iter()
@@ -224,21 +239,35 @@ mod tests {
         assert_eq!(decode_html_entities("&ldquo;hi&rdquo;"), "“hi”");
         assert_eq!(decode_html_entities("&#39;"), "'");
         assert_eq!(decode_html_entities("&#x27;"), "'");
-        assert_eq!(decode_html_entities("<![CDATA[hello &amp; world]]>"), "hello & world");
+        assert_eq!(
+            decode_html_entities("<![CDATA[hello &amp; world]]>"),
+            "hello & world"
+        );
     }
 
     #[test]
     fn extracts_tags_attributes_namespaces_atom_href_and_categories() {
         assert_eq!(extract_rss_tag("<title>Hello</title>", "title"), "Hello");
-        assert_eq!(extract_rss_tag("<title type=\"text\">Hi</title>", "title"), "Hi");
-        assert_eq!(extract_rss_tag("<dc:date>2026-01-01</dc:date>", "date"), "2026-01-01");
+        assert_eq!(
+            extract_rss_tag("<title type=\"text\">Hi</title>", "title"),
+            "Hi"
+        );
+        assert_eq!(
+            extract_rss_tag("<dc:date>2026-01-01</dc:date>", "date"),
+            "2026-01-01"
+        );
         assert_eq!(
             extract_rss_tag("<link href=\"https://example.test/a\" />", "link"),
             "https://example.test/a"
         );
-        assert_eq!(extract_rss_tag("<title><b>Bold</b> news</title>", "title"), "Bold news");
         assert_eq!(
-            extract_rss_categories("<item><category>Singapore</category><category type=\"x\">Politics</category></item>"),
+            extract_rss_tag("<title><b>Bold</b> news</title>", "title"),
+            "Bold news"
+        );
+        assert_eq!(
+            extract_rss_categories(
+                "<item><category>Singapore</category><category type=\"x\">Politics</category></item>"
+            ),
             ["Singapore", "Politics"]
         );
     }
@@ -261,17 +290,29 @@ mod tests {
     #[test]
     fn singapore_relevance_rules() {
         let relevant = |title: &str, url: &str, source: &str, cats: &[&str]| ParsedRssItem {
-            title: title.into(), url: url.into(), source: source.into(),
-            published_at: String::new(), categories: cats.iter().map(|s| s.to_string()).collect(),
+            title: title.into(),
+            url: url.into(),
+            source: source.into(),
+            published_at: String::new(),
+            categories: cats.iter().map(|s| s.to_string()).collect(),
         };
         assert!(is_singapore_relevant(&relevant(
-            "Budget debate", "https://example.test/world/123", "CNA", &["Singapore"]
+            "Budget debate",
+            "https://example.test/world/123",
+            "CNA",
+            &["Singapore"]
         )));
         assert!(!is_singapore_relevant(&relevant(
-            "Global markets", "https://example.test/world/123", "CNA", &["World"]
+            "Global markets",
+            "https://example.test/world/123",
+            "CNA",
+            &["World"]
         )));
         assert!(is_singapore_relevant(&relevant(
-            "Anything", "https://example.test/x", "The Straits Times", &[]
+            "Anything",
+            "https://example.test/x",
+            "The Straits Times",
+            &[]
         )));
     }
 }

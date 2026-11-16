@@ -9,8 +9,8 @@
 //! real CARTO basemap rather than a placeholder (see `MapState::preload_sync`).
 
 use argus_map::{
-    DEFAULT_CENTER, DEFAULT_ZOOM, Icon, LngLat, MapPoint, MapState, Overlays, PointStyle, Polygon, Polyline, RadiusCircle,
-    Rgba, map_view_for,
+    DEFAULT_CENTER, DEFAULT_ZOOM, Icon, LngLat, MapPoint, MapState, Overlays, PointStyle, Polygon,
+    Polyline, RadiusCircle, Rgba, map_view_for,
 };
 use rune::{AppSpec, Cx, El};
 

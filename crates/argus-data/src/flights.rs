@@ -4,17 +4,11 @@
 use std::time::Duration;
 
 use argus_core::{
-    api_types::{
-        AviationStackFlight, AviationStackResponse, OpenSkyResponse, OpenSkyState,
-    },
+    api_types::{AviationStackFlight, AviationStackResponse, OpenSkyResponse, OpenSkyState},
     types::{FlightDirection, FlightState},
 };
 
-use crate::{
-    Client, Result,
-    error::Error,
-    health::Source,
-};
+use crate::{Client, Result, error::Error, health::Source};
 
 const AVIATIONSTACK_BASE_URL: &str = "https://api.aviationstack.com/v1";
 const OPENSKY_BASE_URL: &str = "https://opensky-network.org/api";
@@ -185,8 +179,14 @@ pub fn from_open_sky(row: &OpenSkyState) -> Option<FlightState> {
     Some(FlightState {
         id: icao24.clone(),
         icao24,
-        callsign: if callsign.is_empty() { "UNKN".into() } else { callsign.into() },
-        origin_country: normalize_code(row.origin_country.as_deref()).trim().to_string(),
+        callsign: if callsign.is_empty() {
+            "UNKN".into()
+        } else {
+            callsign.into()
+        },
+        origin_country: normalize_code(row.origin_country.as_deref())
+            .trim()
+            .to_string(),
         latitude,
         longitude,
         altitude: finite(row.baro_altitude),
@@ -202,11 +202,12 @@ pub fn from_open_sky(row: &OpenSkyState) -> Option<FlightState> {
 /// Dedupe by icao24 keeping the newest `last_contact`, then sort fastest
 /// first and cap at 120 (matches the TS client).
 pub fn dedup_and_sort(flights: Vec<FlightState>) -> Vec<FlightState> {
-    let mut by_id: std::collections::HashMap<String, FlightState> = std::collections::HashMap::new();
+    let mut by_id: std::collections::HashMap<String, FlightState> =
+        std::collections::HashMap::new();
     for flight in flights {
-        let replace = by_id
-            .get(&flight.icao24)
-            .is_none_or(|old| flight.last_contact.unwrap_or(0.0) >= old.last_contact.unwrap_or(0.0));
+        let replace = by_id.get(&flight.icao24).is_none_or(|old| {
+            flight.last_contact.unwrap_or(0.0) >= old.last_contact.unwrap_or(0.0)
+        });
         if replace {
             by_id.insert(flight.icao24.clone(), flight);
         }
@@ -262,7 +263,10 @@ impl Client {
                         .and_then(|c| c.as_f64())
                         .map(|v| v.to_string())
                         .unwrap_or_default(),
-                    error.info.or(error.type_field).unwrap_or_else(|| "unknown".into())
+                    error
+                        .info
+                        .or(error.type_field)
+                        .unwrap_or_else(|| "unknown".into())
                 ),
             ));
         }
@@ -273,7 +277,12 @@ impl Client {
         let key = self.config.aviationstack_api_key()?.to_string();
         let mut all = Vec::new();
         let mut succeeded = 0usize;
-        for filter in ["dep_icao=WSSS", "arr_icao=WSSS", "dep_icao=WSSL", "arr_icao=WSSL"] {
+        for filter in [
+            "dep_icao=WSSS",
+            "arr_icao=WSSS",
+            "dep_icao=WSSL",
+            "arr_icao=WSSL",
+        ] {
             match self.fetch_aviationstack_endpoint(&key, filter) {
                 Ok(rows) => {
                     succeeded += 1;
@@ -289,7 +298,9 @@ impl Client {
                 "All AviationStack endpoints failed",
             ));
         }
-        Ok(dedup_and_sort(all.iter().filter_map(from_aviation_stack).collect()))
+        Ok(dedup_and_sort(
+            all.iter().filter_map(from_aviation_stack).collect(),
+        ))
     }
 
     fn fetch_flights_from_open_sky(&self) -> Result<Vec<FlightState>> {
@@ -313,9 +324,7 @@ impl Client {
 
     pub fn get_flights(&self) -> Result<Vec<FlightState>> {
         let result = self.cache.get("flights-sg", FLIGHTS_TTL, || {
-            let mut flights = self
-                .fetch_flights_from_aviationstack()
-                .unwrap_or_default();
+            let mut flights = self.fetch_flights_from_aviationstack().unwrap_or_default();
             if flights.is_empty() {
                 flights = self.fetch_flights_from_open_sky().unwrap_or_default();
             }
@@ -332,10 +341,8 @@ impl Client {
         });
         let result = self.finish(Source::Flights, result);
         if self.config.aviationstack_api_key.is_none() {
-            self.health.mark_ok_with_message(
-                Source::Flights,
-                "AVIATIONSTACK_API_KEY not configured",
-            );
+            self.health
+                .mark_ok_with_message(Source::Flights, "AVIATIONSTACK_API_KEY not configured");
         }
         result
     }
@@ -360,9 +367,19 @@ mod tests {
                 iata: arr_icao.map(|_| "SIN".to_string()),
                 icao: arr_icao.map(str::to_string),
             }),
-            airline: Some(AviationAirline { name: Some("Singapore Airlines".into()), iata: Some("SQ".into()) }),
-            flight: Some(AviationFlightInfo { number: Some("5".into()), iata: Some("SQ5".into()), icao: Some("SIA5".into()) }),
-            aircraft: Some(AviationAircraft { registration: Some("9V-SMP".into()), icao24: Some(icao.into()) }),
+            airline: Some(AviationAirline {
+                name: Some("Singapore Airlines".into()),
+                iata: Some("SQ".into()),
+            }),
+            flight: Some(AviationFlightInfo {
+                number: Some("5".into()),
+                iata: Some("SQ5".into()),
+                icao: Some("SIA5".into()),
+            }),
+            aircraft: Some(AviationAircraft {
+                registration: Some("9V-SMP".into()),
+                icao24: Some(icao.into()),
+            }),
             live: Some(AviationLive {
                 updated: Some("2026-09-03T00:00:00Z".into()),
                 latitude: Some(1.3644),
@@ -381,7 +398,10 @@ mod tests {
         let state = from_aviation_stack(&flight("76C0A1", Some("WSSS"))).unwrap();
         assert_eq!(state.direction, FlightDirection::Inbound);
         assert!((state.velocity.unwrap() - 800.0 / 3.6).abs() < 1e-9);
-        assert_eq!(state.last_contact, Some((crate::time::parse_timestamp("2026-09-03T00:00:00Z").unwrap() / 1000) as f64));
+        assert_eq!(
+            state.last_contact,
+            Some((crate::time::parse_timestamp("2026-09-03T00:00:00Z").unwrap() / 1000) as f64)
+        );
         assert_eq!(state.origin_country, "Bangkok");
     }
 
@@ -390,9 +410,18 @@ mod tests {
         let lat = 1.3;
         let lng = 103.8;
         let heading = bearing_degrees(lat, lng, CHANGI.0, CHANGI.1);
-        assert_eq!(classify_flight_direction(lat, lng, Some(heading)), FlightDirection::Inbound);
-        assert_eq!(classify_flight_direction(lat, lng, Some((heading + 180.0) % 360.0)), FlightDirection::Outbound);
-        assert_eq!(classify_flight_direction(lat, lng, None), FlightDirection::Transit);
+        assert_eq!(
+            classify_flight_direction(lat, lng, Some(heading)),
+            FlightDirection::Inbound
+        );
+        assert_eq!(
+            classify_flight_direction(lat, lng, Some((heading + 180.0) % 360.0)),
+            FlightDirection::Outbound
+        );
+        assert_eq!(
+            classify_flight_direction(lat, lng, None),
+            FlightDirection::Transit
+        );
     }
 
     #[test]

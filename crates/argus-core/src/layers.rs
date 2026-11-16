@@ -30,7 +30,11 @@ pub enum LayerLegendItem {
     #[serde(rename = "dot")]
     Dot { tone: String, label: String },
     #[serde(rename = "swatch")]
-    Swatch { shape: String, tone: String, label: String },
+    Swatch {
+        shape: String,
+        tone: String,
+        label: String,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -50,44 +54,225 @@ pub struct LayerDefinition {
 fn legend_dots(items: &[(&str, &str)]) -> Vec<LayerLegendItem> {
     items
         .iter()
-        .map(|(tone, label)| LayerLegendItem::Dot { tone: (*tone).into(), label: (*label).into() })
+        .map(|(tone, label)| LayerLegendItem::Dot {
+            tone: (*tone).into(),
+            label: (*label).into(),
+        })
         .collect()
 }
 
 pub fn layer_definitions() -> Vec<LayerDefinition> {
-    let dot = |key: &str, group: LayerGroupId, label: &str, note: &str, tone: &str, on: bool, legend: Vec<LayerLegendItem>| {
+    let dot = |key: &str,
+               group: LayerGroupId,
+               label: &str,
+               note: &str,
+               tone: &str,
+               on: bool,
+               legend: Vec<LayerLegendItem>| {
         LayerDefinition {
-            key: key.into(), group, label: label.into(), note: note.into(),
-            tone: format!("text-signal-{}", tone), dot: format!("bg-signal-{}", tone),
-            legend, default_on: on,
+            key: key.into(),
+            group,
+            label: label.into(),
+            note: note.into(),
+            tone: format!("text-signal-{}", tone),
+            dot: format!("bg-signal-{}", tone),
+            legend,
+            default_on: on,
         }
     };
     let single = |tone: &str, label: &str| legend_dots(&[(tone, label)]);
     vec![
-        dot("flights", LayerGroupId::Transport, "Air Activity", "live tracks", "inbound", true,
-            legend_dots(&[("bg-signal-inbound", "Inbound"), ("bg-signal-outbound", "Outbound"), ("bg-signal-transit", "Transit")])),
-        dot("mrt", LayerGroupId::Transport, "MRT & LRT", "lines + stations", "mrt", true, single("bg-signal-mrt", "MRT")),
-        dot("busStops", LayerGroupId::Transport, "Bus Stops", "monitor points", "bus", true, single("bg-signal-bus", "Bus")),
-        dot("cameras", LayerGroupId::Ground, "Road Cameras", "stream nodes", "camera", true, single("bg-signal-camera", "Cameras")),
-        dot("incidents", LayerGroupId::Ground, "Road Incidents", "live events", "incident", false, single("bg-signal-incident", "Incidents")),
-        dot("carparks", LayerGroupId::Ground, "Carparks", "live free lots", "carpark", false, single("bg-signal-carpark", "Carparks")),
-        dot("evChargers", LayerGroupId::Ground, "EV Charging", "live chargers", "ev", false, single("bg-signal-ev", "EV")),
-        dot("parks", LayerGroupId::Amenities, "Parks & Trails", "parks · connectors · trails", "park", false, vec![
-            LayerLegendItem::Swatch { shape: "area".into(), tone: "border-signal-park bg-signal-park/30".into(), label: "Parks".into() },
-            LayerLegendItem::Swatch { shape: "line".into(), tone: "bg-signal-park".into(), label: "Park connectors".into() },
-            LayerLegendItem::Swatch { shape: "dashed".into(), tone: "border-signal-park".into(), label: "Trails".into() },
-        ]),
-        dot("malls", LayerGroupId::Amenities, "Malls", "shopping centres", "mall", false, single("bg-signal-mall", "Malls")),
-        dot("hawkers", LayerGroupId::Amenities, "Hawker Centres", "food centres", "hawker", false, single("bg-signal-hawker", "Hawkers")),
-        dot("gyms", LayerGroupId::Amenities, "Gyms", "fitness centres", "gym", false, single("bg-signal-gym", "Gyms")),
-        dot("communityClubs", LayerGroupId::Amenities, "Community Clubs", "PA outlets", "community-club", false, single("bg-signal-community-club", "Community Clubs")),
-        dot("pharmacies", LayerGroupId::Amenities, "Pharmacies", "retail pharmacies", "pharmacy", false, single("bg-signal-pharmacy", "Pharmacies")),
-        dot("hotels", LayerGroupId::Amenities, "Hotels", "licensed hotels", "hotel", false, single("bg-signal-hotel", "Hotels")),
-        dot("heritage", LayerGroupId::Amenities, "Heritage", "historic sites · monuments · museums", "heritage", false, single("bg-signal-heritage", "Heritage")),
-        dot("healthcare", LayerGroupId::Amenities, "Healthcare", "GP · hospitals · dental", "healthcare", false, single("bg-signal-healthcare", "Healthcare")),
-        dot("libraries", LayerGroupId::Amenities, "Libraries", "public libraries", "library", false, single("bg-signal-library", "Libraries")),
-        dot("supermarkets", LayerGroupId::Amenities, "Supermarkets", "grocery supermarkets", "supermarket", false, single("bg-signal-supermarket", "Supermarkets")),
-        dot("schools", LayerGroupId::Amenities, "Schools", "MOE schools · polytechnics · universities", "school", false, single("bg-signal-school", "Schools")),
+        dot(
+            "flights",
+            LayerGroupId::Transport,
+            "Air Activity",
+            "live tracks",
+            "inbound",
+            true,
+            legend_dots(&[
+                ("bg-signal-inbound", "Inbound"),
+                ("bg-signal-outbound", "Outbound"),
+                ("bg-signal-transit", "Transit"),
+            ]),
+        ),
+        dot(
+            "mrt",
+            LayerGroupId::Transport,
+            "MRT & LRT",
+            "lines + stations",
+            "mrt",
+            true,
+            single("bg-signal-mrt", "MRT"),
+        ),
+        dot(
+            "busStops",
+            LayerGroupId::Transport,
+            "Bus Stops",
+            "monitor points",
+            "bus",
+            true,
+            single("bg-signal-bus", "Bus"),
+        ),
+        dot(
+            "cameras",
+            LayerGroupId::Ground,
+            "Road Cameras",
+            "stream nodes",
+            "camera",
+            true,
+            single("bg-signal-camera", "Cameras"),
+        ),
+        dot(
+            "incidents",
+            LayerGroupId::Ground,
+            "Road Incidents",
+            "live events",
+            "incident",
+            false,
+            single("bg-signal-incident", "Incidents"),
+        ),
+        dot(
+            "carparks",
+            LayerGroupId::Ground,
+            "Carparks",
+            "live free lots",
+            "carpark",
+            false,
+            single("bg-signal-carpark", "Carparks"),
+        ),
+        dot(
+            "evChargers",
+            LayerGroupId::Ground,
+            "EV Charging",
+            "live chargers",
+            "ev",
+            false,
+            single("bg-signal-ev", "EV"),
+        ),
+        dot(
+            "parks",
+            LayerGroupId::Amenities,
+            "Parks & Trails",
+            "parks · connectors · trails",
+            "park",
+            false,
+            vec![
+                LayerLegendItem::Swatch {
+                    shape: "area".into(),
+                    tone: "border-signal-park bg-signal-park/30".into(),
+                    label: "Parks".into(),
+                },
+                LayerLegendItem::Swatch {
+                    shape: "line".into(),
+                    tone: "bg-signal-park".into(),
+                    label: "Park connectors".into(),
+                },
+                LayerLegendItem::Swatch {
+                    shape: "dashed".into(),
+                    tone: "border-signal-park".into(),
+                    label: "Trails".into(),
+                },
+            ],
+        ),
+        dot(
+            "malls",
+            LayerGroupId::Amenities,
+            "Malls",
+            "shopping centres",
+            "mall",
+            false,
+            single("bg-signal-mall", "Malls"),
+        ),
+        dot(
+            "hawkers",
+            LayerGroupId::Amenities,
+            "Hawker Centres",
+            "food centres",
+            "hawker",
+            false,
+            single("bg-signal-hawker", "Hawkers"),
+        ),
+        dot(
+            "gyms",
+            LayerGroupId::Amenities,
+            "Gyms",
+            "fitness centres",
+            "gym",
+            false,
+            single("bg-signal-gym", "Gyms"),
+        ),
+        dot(
+            "communityClubs",
+            LayerGroupId::Amenities,
+            "Community Clubs",
+            "PA outlets",
+            "community-club",
+            false,
+            single("bg-signal-community-club", "Community Clubs"),
+        ),
+        dot(
+            "pharmacies",
+            LayerGroupId::Amenities,
+            "Pharmacies",
+            "retail pharmacies",
+            "pharmacy",
+            false,
+            single("bg-signal-pharmacy", "Pharmacies"),
+        ),
+        dot(
+            "hotels",
+            LayerGroupId::Amenities,
+            "Hotels",
+            "licensed hotels",
+            "hotel",
+            false,
+            single("bg-signal-hotel", "Hotels"),
+        ),
+        dot(
+            "heritage",
+            LayerGroupId::Amenities,
+            "Heritage",
+            "historic sites · monuments · museums",
+            "heritage",
+            false,
+            single("bg-signal-heritage", "Heritage"),
+        ),
+        dot(
+            "healthcare",
+            LayerGroupId::Amenities,
+            "Healthcare",
+            "GP · hospitals · dental",
+            "healthcare",
+            false,
+            single("bg-signal-healthcare", "Healthcare"),
+        ),
+        dot(
+            "libraries",
+            LayerGroupId::Amenities,
+            "Libraries",
+            "public libraries",
+            "library",
+            false,
+            single("bg-signal-library", "Libraries"),
+        ),
+        dot(
+            "supermarkets",
+            LayerGroupId::Amenities,
+            "Supermarkets",
+            "grocery supermarkets",
+            "supermarket",
+            false,
+            single("bg-signal-supermarket", "Supermarkets"),
+        ),
+        dot(
+            "schools",
+            LayerGroupId::Amenities,
+            "Schools",
+            "MOE schools · polytechnics · universities",
+            "school",
+            false,
+            single("bg-signal-school", "Schools"),
+        ),
     ]
 }
 
@@ -99,7 +284,10 @@ pub fn layer_by_key(key: &str) -> Option<&'static LayerDefinition> {
 }
 
 pub fn default_sensor_visibility() -> BTreeMap<String, bool> {
-    LAYERS.iter().map(|l| (l.key.clone(), l.default_on)).collect()
+    LAYERS
+        .iter()
+        .map(|l| (l.key.clone(), l.default_on))
+        .collect()
 }
 
 /// Totally-on record for a sub-filter's options.
@@ -198,7 +386,12 @@ pub fn build_layer_groups(
             .iter()
             .filter(|row| visibility.get(row.key.as_str()).copied().unwrap_or(false))
             .count();
-        result.push(LayerListGroup { id, label: label.into(), rows: filtered_rows, visible_count });
+        result.push(LayerListGroup {
+            id,
+            label: label.into(),
+            rows: filtered_rows,
+            visible_count,
+        });
     }
     result
 }
@@ -210,14 +403,14 @@ mod tests {
     #[test]
     fn registry_defaults_and_toggle() {
         let defaults = default_sensor_visibility();
-        assert_eq!(defaults["flights"], true);
-        assert_eq!(defaults["parks"], false);
+        assert!(defaults["flights"]);
+        assert!(!defaults["parks"]);
         assert_eq!(LAYERS.len(), 19);
         let values: Vec<String> = ["a".into(), "b".into()].to_vec();
         let all = all_layer_options_on(&values);
         let solo = toggle_layer_option_selection(&all, "a", &values);
-        assert_eq!(solo["a"], true);
-        assert_eq!(solo["b"], false);
+        assert!(solo["a"]);
+        assert!(!solo["b"]);
         let back = toggle_layer_option_selection(&solo, "a", &values);
         assert_eq!(back, all);
     }
@@ -225,8 +418,16 @@ mod tests {
     #[test]
     fn build_groups_respects_registry_order() {
         let rows = vec![
-            LayerRow { key: "flights".into(), label: "Air Activity".into(), note: "live tracks".into() },
-            LayerRow { key: "parks".into(), label: "Parks & Trails".into(), note: "parks".into() },
+            LayerRow {
+                key: "flights".into(),
+                label: "Air Activity".into(),
+                note: "live tracks".into(),
+            },
+            LayerRow {
+                key: "parks".into(),
+                label: "Parks & Trails".into(),
+                note: "parks".into(),
+            },
         ];
         let mut visibility = HashMap::new();
         visibility.insert("flights".to_string(), true);

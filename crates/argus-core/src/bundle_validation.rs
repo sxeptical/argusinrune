@@ -1,4 +1,4 @@
-//! Shared checks for the static JSON bundles in `public/`.
+//! Shared checks for the static JSON bundles in `data/`.
 //! Ported from `lib/bundle-validation.ts`. Each bundle is validated once at
 //! load, so a bad regeneration fails fast instead of rendering broken markers.
 
@@ -16,7 +16,7 @@ pub fn is_nullable_non_negative_integer(value: &Value) -> bool {
     }
     match value.as_i64() {
         Some(n) => n >= 0,
-        None => value.as_f64().map_or(false, |n| n.fract() == 0.0 && n >= 0.0),
+        None => value.as_f64().is_some_and(|n| n.fract() == 0.0 && n >= 0.0),
     }
 }
 
@@ -38,10 +38,14 @@ pub fn is_place(value: &Value) -> bool {
         None => return false,
     };
     let has_nonempty = |key: &str| -> bool {
-        obj.get(key).and_then(Value::as_str).map_or(false, |s| !s.is_empty())
+        obj.get(key)
+            .and_then(Value::as_str)
+            .is_some_and(|s| !s.is_empty())
     };
     let finite = |key: &str| -> bool {
-        obj.get(key).and_then(Value::as_f64).map_or(false, |n| n.is_finite())
+        obj.get(key)
+            .and_then(Value::as_f64)
+            .is_some_and(|n| n.is_finite())
     };
     has_nonempty("id") && has_nonempty("name") && finite("lat") && finite("lng")
 }
@@ -51,11 +55,11 @@ pub fn is_addressed_place(value: &Value) -> bool {
     is_place(value)
         && value
             .as_object()
-            .map_or(false, |o| o.get("address").map_or(true, is_nullable_string))
+            .is_some_and(|o| o.get("address").is_none_or(is_nullable_string))
 }
 
 pub fn is_one_of(options: &[&str], value: &Value) -> bool {
-    value.as_str().map_or(false, |s| options.contains(&s))
+    value.as_str().is_some_and(|s| options.contains(&s))
 }
 
 const WIKIMEDIA_UPLOAD: &str = "https://upload.wikimedia.org/";
@@ -74,26 +78,29 @@ pub fn is_photo(value: &Value) -> bool {
         return false;
     };
     // `year` must be an integer when present.
-    if let Some(year) = obj.get("year") {
-        if !year.is_null() && year.as_i64().is_none() {
-            return false;
-        }
+    if let Some(year) = obj.get("year")
+        && !year.is_null()
+        && year.as_i64().is_none()
+    {
+        return false;
     }
     // `page` is rendered as an href: null or an https URL only.
     let page = obj.get("page");
-    let page_ok = page.map_or(true, |p| {
+    let page_ok = page.is_none_or(|p| {
         p.is_null()
-            || p.as_str().map_or(false, |s| s.to_ascii_lowercase().starts_with("https://"))
+            || p.as_str()
+                .is_some_and(|s| s.to_ascii_lowercase().starts_with("https://"))
     });
     if !page_ok {
         return false;
     }
     match string("source") {
         Some("commons") => {
-            let thumb_ok = thumb.starts_with(WIKIMEDIA_UPLOAD) || thumb.starts_with(WIKIMEDIA_THUMB);
-            let license_ok = string("license").map_or(false, |s| !s.is_empty());
-            let page_ok = page.map_or(true, |p| {
-                p.is_null() || p.as_str().map_or(false, |s| s.starts_with(COMMONS_PAGE))
+            let thumb_ok =
+                thumb.starts_with(WIKIMEDIA_UPLOAD) || thumb.starts_with(WIKIMEDIA_THUMB);
+            let license_ok = string("license").is_some_and(|s| !s.is_empty());
+            let page_ok = page.is_none_or(|p| {
+                p.is_null() || p.as_str().is_some_and(|s| s.starts_with(COMMONS_PAGE))
             });
             thumb_ok && license_ok && page_ok
         }
@@ -103,7 +110,7 @@ pub fn is_photo(value: &Value) -> bool {
 }
 
 pub fn is_photo_list(value: &Value) -> bool {
-    value.as_array().map_or(false, |arr| arr.iter().all(is_photo))
+    value.as_array().is_some_and(|arr| arr.iter().all(is_photo))
 }
 
 #[cfg(test)]
@@ -115,12 +122,18 @@ mod tests {
     fn place_and_url_checks() {
         let place = json!({"id": "p-1", "name": "Somewhere", "lat": 1.3, "lng": 103.8});
         assert!(is_place(&place));
-        assert!(!is_place(&json!({"id": "", "name": "x", "lat": 1.3, "lng": 103.8})));
-        assert!(!is_place(&json!({"id": "x", "name": "x", "lat": null, "lng": 103.8})));
-        assert!(is_addressed_place(&json!({"id":"x","name":"x","lat":1.0,"lng":1.0,"address":null})));
+        assert!(!is_place(
+            &json!({"id": "", "name": "x", "lat": 1.3, "lng": 103.8})
+        ));
+        assert!(!is_place(
+            &json!({"id": "x", "name": "x", "lat": null, "lng": 103.8})
+        ));
+        assert!(is_addressed_place(
+            &json!({"id":"x","name":"x","lat":1.0,"lng":1.0,"address":null})
+        ));
         assert!(is_nullable_http_url(&json!("https://example.com")));
         assert!(!is_nullable_http_url(&json!("javascript:alert(1)")));
-        assert!(is_one_of(&["a","b"], &json!("b")));
+        assert!(is_one_of(&["a", "b"], &json!("b")));
     }
 
     #[test]
@@ -132,7 +145,11 @@ mod tests {
         });
         let nea = json!({"thumb": "https://www.nea.gov.sg/images/a.jpg", "page": null, "author": "NEA", "license": null, "source": "nea"});
         assert!(is_photo_list(&json!([commons, nea])));
-        assert!(!is_photo_list(&json!([{"thumb":"https://evil.example/a.jpg","author":"x","page":null,"license":"CC0","source":"commons"}])));
-        assert!(!is_photo_list(&json!([{"thumb":"https://www.nea.gov.sg.evil.example/a.jpg","author":"x","page":null,"license":null,"source":"nea"}])));
+        assert!(!is_photo_list(
+            &json!([{"thumb":"https://evil.example/a.jpg","author":"x","page":null,"license":"CC0","source":"commons"}])
+        ));
+        assert!(!is_photo_list(
+            &json!([{"thumb":"https://www.nea.gov.sg.evil.example/a.jpg","author":"x","page":null,"license":null,"source":"nea"}])
+        ));
     }
 }

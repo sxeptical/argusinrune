@@ -90,8 +90,11 @@ mod tests {
     #[test]
     fn bus_stop_results_and_ranking() {
         let stops = vec![BusStop {
-            bus_stop_code: "01012".into(), road_name: "Victoria St".into(),
-            description: "Bugis Stn".into(), latitude: 1.3, longitude: 103.85,
+            bus_stop_code: "01012".into(),
+            road_name: "Victoria St".into(),
+            description: "Bugis Stn".into(),
+            latitude: 1.3,
+            longitude: 103.85,
         }];
         let results = build_bus_stop_search_results(&stops);
         assert_eq!(results[0].id, "01012");

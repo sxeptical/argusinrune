@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * Authoring-time data pipeline (not run in CI or deployment). Builds the
- * static healthcare bundle (public/healthcare.json) from:
+ * static healthcare bundle (data/healthcare.json) from:
  *  - MOH CHAS Clinics (data.gov.sg, Singapore Open Data Licence): 1,193
  *    points, all attributes packed in the KML HTML `Description` (parsed
  *    with scripts/lib/kml-description.mjs). HCI_CODE is the unique id.
@@ -39,7 +39,7 @@ const composeAddress = (p) => {
   return base ? `${base}${postcode ? `, Singapore ${postcode}` : ""}` : postcode ? `Singapore ${postcode}` : null;
 };
 
-const poll = await fetchJson(`https://api-open.data.gov.sg/v1/public/api/datasets/${CHAS_DATASET}/poll-download`);
+const poll = await fetchJson(`https://api-open.data.gov.sg/v1/data/api/datasets/${CHAS_DATASET}/poll-download`);
 const url = poll?.data?.url;
 if (!url) throw new Error(`No presigned URL returned for ${CHAS_DATASET}`);
 const data = await fetchJson(url, { headers: { "User-Agent": USER_AGENT } });
@@ -130,8 +130,8 @@ const { places: withPhotos, applied: pickedCount } = await applyPhotoPicks(
 const photoCount = withPhotos.filter((site) => site.photos.length).length;
 
 const serialized = JSON.stringify(withPhotos);
-await mkdir("public", { recursive: true });
-await writeFile("public/healthcare.json", serialized);
+await mkdir("data", { recursive: true });
+await writeFile("data/healthcare.json", serialized);
 console.log(
   `Healthcare bundle: ${sites.length} sites ` +
     `(${clinics.length} GP clinics, ${hospitals.places.length} hospitals, ${dentists.places.length} dental; ` +

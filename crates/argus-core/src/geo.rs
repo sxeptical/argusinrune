@@ -111,8 +111,7 @@ fn polygon_touches(filter: &GeoFilter, rings: &[Vec<LngLat>]) -> bool {
         return true;
     }
     // Circle entirely inside the polygon (and not inside a hole).
-    center_in_ring(filter, &rings[0])
-        && !rings[1..].iter().any(|hole| center_in_ring(filter, hole))
+    center_in_ring(filter, &rings[0]) && !rings[1..].iter().any(|hole| center_in_ring(filter, hole))
 }
 
 /// Geometry type of a `FilterableGeometry` (GeoJSON-like).
@@ -242,10 +241,7 @@ fn segment_line_intersection(
 }
 
 /// Sutherland–Hodgman clip of a ring against a convex CCW clip polygon.
-fn clip_ring_to_convex(
-    subject: &[(f64, f64)],
-    clip: &[(f64, f64)],
-) -> Vec<(f64, f64)> {
+fn clip_ring_to_convex(subject: &[(f64, f64)], clip: &[(f64, f64)]) -> Vec<(f64, f64)> {
     let mut output = subject.to_vec();
     for i in 0..clip.len() {
         if output.is_empty() {
@@ -276,20 +272,13 @@ fn clip_ring_to_convex(
 }
 
 /// Clip one ring to the circle, keeping the original when wholly inside.
-fn clip_ring_to_radius(
-    filter: &GeoFilter,
-    ring: &[LngLat],
-    circle: &[(f64, f64)],
-) -> Vec<LngLat> {
+fn clip_ring_to_radius(filter: &GeoFilter, ring: &[LngLat], circle: &[(f64, f64)]) -> Vec<LngLat> {
     let local: Vec<(f64, f64)> = ring
         .iter()
         .map(|p| to_local_metres(filter.center, *p))
         .collect();
     let radius_sq = filter.radius_m * filter.radius_m;
-    if local
-        .iter()
-        .all(|p| p.0 * p.0 + p.1 * p.1 <= radius_sq)
-    {
+    if local.iter().all(|p| p.0 * p.0 + p.1 * p.1 <= radius_sq) {
         return ring.to_vec();
     }
     clip_ring_to_convex(&local, circle)
@@ -349,8 +338,9 @@ pub fn clip_geometry_to_radius(
                 Some(FilterableGeometry::MultiLineString(pieces))
             }
         }
-        FilterableGeometry::Polygon(rings) => clip_polygon_rings(filter, rings)
-            .map(FilterableGeometry::Polygon),
+        FilterableGeometry::Polygon(rings) => {
+            clip_polygon_rings(filter, rings).map(FilterableGeometry::Polygon)
+        }
         FilterableGeometry::MultiPolygon(polygons) => {
             let clipped: Vec<Vec<Vec<LngLat>>> = polygons
                 .iter()
@@ -432,7 +422,10 @@ fn empty_circle_geojson() -> GeoFilterCircleGeoJson {
     }
 }
 
-pub fn build_geo_filter_circle_geojson(filter: Option<&GeoFilter>, steps: usize) -> GeoFilterCircleGeoJson {
+pub fn build_geo_filter_circle_geojson(
+    filter: Option<&GeoFilter>,
+    steps: usize,
+) -> GeoFilterCircleGeoJson {
     let filter = match filter {
         Some(f) => f,
         None => return empty_circle_geojson(),
@@ -444,10 +437,7 @@ pub fn build_geo_filter_circle_geojson(filter: Option<&GeoFilter>, steps: usize)
     let mut ring: Vec<LngLat> = Vec::with_capacity(steps + 1);
     for i in 0..=steps {
         let theta = ((i % steps) as f64 / steps as f64) * 2.0 * std::f64::consts::PI;
-        ring.push([
-            lng + east_deg * theta.sin(),
-            lat + north_deg * theta.cos(),
-        ]);
+        ring.push([lng + east_deg * theta.sin(), lat + north_deg * theta.cos()]);
     }
     GeoFilterCircleGeoJson {
         r#type: "FeatureCollection".into(),
@@ -510,7 +500,10 @@ mod tests {
 
     const CENTER: LngLat = [103.8515, 1.2840];
     fn filter() -> GeoFilter {
-        GeoFilter { center: CENTER, radius_m: 1_000.0 }
+        GeoFilter {
+            center: CENTER,
+            radius_m: 1_000.0,
+        }
     }
     const DEG_PER_KM: f64 = 1.0 / 111.0;
 
@@ -548,22 +541,31 @@ mod tests {
     #[test]
     fn geometry_touching_lines_and_polygons() {
         let f = filter();
-        assert!(geometry_touches_radius(&f, &FilterableGeometry::LineString(vec![
-            [CENTER[0] - 3.0 * DEG_PER_KM, CENTER[1]],
-            [CENTER[0] + 3.0 * DEG_PER_KM, CENTER[1]],
-        ])));
-        assert!(!geometry_touches_radius(&f, &FilterableGeometry::MultiLineString(vec![vec![
-            [CENTER[0] - 3.0 * DEG_PER_KM, CENTER[1] + 2.0 * DEG_PER_KM],
-            [CENTER[0] + 3.0 * DEG_PER_KM, CENTER[1] + 2.0 * DEG_PER_KM],
-        ]])));
+        assert!(geometry_touches_radius(
+            &f,
+            &FilterableGeometry::LineString(vec![
+                [CENTER[0] - 3.0 * DEG_PER_KM, CENTER[1]],
+                [CENTER[0] + 3.0 * DEG_PER_KM, CENTER[1]],
+            ])
+        ));
+        assert!(!geometry_touches_radius(
+            &f,
+            &FilterableGeometry::MultiLineString(vec![vec![
+                [CENTER[0] - 3.0 * DEG_PER_KM, CENTER[1] + 2.0 * DEG_PER_KM],
+                [CENTER[0] + 3.0 * DEG_PER_KM, CENTER[1] + 2.0 * DEG_PER_KM],
+            ]])
+        ));
         let d = 5.0 * DEG_PER_KM;
-        assert!(geometry_touches_radius(&f, &FilterableGeometry::Polygon(vec![vec![
-            [CENTER[0] - d, CENTER[1] - d],
-            [CENTER[0] + d, CENTER[1] - d],
-            [CENTER[0] + d, CENTER[1] + d],
-            [CENTER[0] - d, CENTER[1] + d],
-            [CENTER[0] - d, CENTER[1] - d],
-        ]])));
+        assert!(geometry_touches_radius(
+            &f,
+            &FilterableGeometry::Polygon(vec![vec![
+                [CENTER[0] - d, CENTER[1] - d],
+                [CENTER[0] + d, CENTER[1] - d],
+                [CENTER[0] + d, CENTER[1] + d],
+                [CENTER[0] - d, CENTER[1] + d],
+                [CENTER[0] - d, CENTER[1] - d],
+            ]])
+        ));
     }
 
     #[test]
@@ -592,22 +594,49 @@ mod tests {
         let f = filter();
         let east = |km: f64| [CENTER[0] + km * DEG_PER_KM, CENTER[1]];
         let north = |km: f64| [CENTER[0], CENTER[1] + km * DEG_PER_KM];
-        let result = clip_geometry_to_radius(&f, &FilterableGeometry::Polygon(vec![vec![
-            east(-3.0), north(-3.0), north(3.0), east(3.0), east(-3.0),
-        ]]));
+        let result = clip_geometry_to_radius(
+            &f,
+            &FilterableGeometry::Polygon(vec![vec![
+                east(-3.0),
+                north(-3.0),
+                north(3.0),
+                east(3.0),
+                east(-3.0),
+            ]]),
+        );
         assert_eq!(result.as_ref().map(|g| g.geometry_type()), Some("Polygon"));
-        let inside = vec![vec![east(-0.1), north(-0.1), north(0.1), east(0.1), east(-0.1)]];
+        let inside = vec![vec![
+            east(-0.1),
+            north(-0.1),
+            north(0.1),
+            east(0.1),
+            east(-0.1),
+        ]];
         let result = clip_geometry_to_radius(&f, &FilterableGeometry::Polygon(inside.clone()));
         assert_eq!(result, Some(FilterableGeometry::Polygon(inside)));
-        let outside = vec![vec![east(3.0), north(3.0), north(4.0), east(4.0), east(3.0)]];
-        assert_eq!(clip_geometry_to_radius(&f, &FilterableGeometry::Polygon(outside)), None);
+        let outside = vec![vec![
+            east(3.0),
+            north(3.0),
+            north(4.0),
+            east(4.0),
+            east(3.0),
+        ]];
+        assert_eq!(
+            clip_geometry_to_radius(&f, &FilterableGeometry::Polygon(outside)),
+            None
+        );
     }
 
     #[test]
     fn circle_and_mask_geojson() {
-        assert!(build_geo_filter_circle_geojson(None, 96).features.is_empty());
+        assert!(
+            build_geo_filter_circle_geojson(None, 96)
+                .features
+                .is_empty()
+        );
         let ring = &build_geo_filter_circle_geojson(Some(&filter()), 32).features[0]
-            .geometry.coordinates[0];
+            .geometry
+            .coordinates[0];
         assert_eq!(ring.len(), 33);
         assert_eq!(ring[0], ring[32]);
         for p in ring {

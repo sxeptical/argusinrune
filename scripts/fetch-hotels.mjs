@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * Authoring-time data pipeline (not run in CI or deployment). Builds the
- * static hotel bundle (public/hotels.json) from the Hotels Licensing Board
+ * static hotel bundle (data/hotels.json) from the Hotels Licensing Board
  * "Hotels" dataset (data.gov.sg, Singapore Open Data Licence), with
  * Wikimedia Commons photos where a hotel has a Wikidata item (bridged via
  * OSM `tourism=hotel` `wikidata` tags, else label search — see
@@ -33,7 +33,7 @@ const roomCount = (value) => {
   return Number.isFinite(rooms) && rooms > 0 ? Math.round(rooms) : null;
 };
 
-const poll = await fetchJson(`https://api-open.data.gov.sg/v1/public/api/datasets/${HOTEL_DATASET}/poll-download`);
+const poll = await fetchJson(`https://api-open.data.gov.sg/v1/data/api/datasets/${HOTEL_DATASET}/poll-download`);
 const url = poll?.data?.url;
 if (!url) throw new Error(`No presigned URL returned for ${HOTEL_DATASET}`);
 const data = await fetchJson(url, { headers: { "User-Agent": USER_AGENT } });
@@ -78,8 +78,8 @@ const { places: withPhotos, applied: pickedCount } = await applyPhotoPicks(
 const photoCount = withPhotos.filter((hotel) => hotel.photos.length).length;
 
 const serialized = JSON.stringify(withPhotos);
-await mkdir("public", { recursive: true });
-await writeFile("public/hotels.json", serialized);
+await mkdir("data", { recursive: true });
+await writeFile("data/hotels.json", serialized);
 console.log(
   `Hotel bundle: ${hotels.length} hotels (${skipped.length} skipped${skipped.length ? `: ${skipped.join("; ")}` : ""}; ` +
     `photos on ${photoCount}; ${stats.matched} matched to a Wikidata item, ${stats.searched} label searches, ` +

@@ -40,7 +40,10 @@ pub fn visible<'a>(s: &'a AppState, query: &str) -> Vec<&'a argus_core::types::M
 /// bus stops also move the camera.
 pub fn selection_for(result: &argus_core::types::MapSearchResult) -> Option<Selection> {
     match &result.result_type {
-        SearchResultType::Amenity(kind) => Some(Selection::Amenity { kind: *kind, id: result.id.clone() }),
+        SearchResultType::Amenity(kind) => Some(Selection::Amenity {
+            kind: *kind,
+            id: result.id.clone(),
+        }),
         SearchResultType::Park => Some(Selection::Park {
             name: result.name.clone(),
             kind: argus_core::types::ParkFeatureKind::Park,

@@ -1,7 +1,9 @@
 //! The map camera: fractional zoom, centre and viewport, with a Singapore clamp.
 
 pub use crate::projection::LngLat;
-use crate::projection::{clamp_lat, lat_to_world_y, lon_to_world_x, project, unproject, world_x_to_lon, world_y_to_lat};
+use crate::projection::{
+    clamp_lat, lat_to_world_y, lon_to_world_x, project, unproject, world_x_to_lon, world_y_to_lat,
+};
 
 /// Longitude/latitude rectangle. `south_west` / `north_east` are WGS84 degrees.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -14,15 +16,26 @@ pub struct LatLngBounds {
 
 impl LatLngBounds {
     pub const fn new(min_lon: f64, min_lat: f64, max_lon: f64, max_lat: f64) -> Self {
-        Self { min_lon, min_lat, max_lon, max_lat }
+        Self {
+            min_lon,
+            min_lat,
+            max_lon,
+            max_lat,
+        }
     }
 
     pub fn contains(&self, p: LngLat) -> bool {
-        p.lon >= self.min_lon && p.lon <= self.max_lon && p.lat >= self.min_lat && p.lat <= self.max_lat
+        p.lon >= self.min_lon
+            && p.lon <= self.max_lon
+            && p.lat >= self.min_lat
+            && p.lat <= self.max_lat
     }
 
     pub fn center(&self) -> LngLat {
-        LngLat::new((self.min_lon + self.max_lon) / 2.0, (self.min_lat + self.max_lat) / 2.0)
+        LngLat::new(
+            (self.min_lon + self.max_lon) / 2.0,
+            (self.min_lat + self.max_lat) / 2.0,
+        )
     }
 }
 
@@ -109,13 +122,19 @@ impl MapCamera {
     /// Convert a screen point (from the map element's top-left) to world pixels.
     pub fn screen_to_world(&self, sx: f32, sy: f32) -> (f64, f64) {
         let (cx, cy) = self.world_center();
-        (cx + sx as f64 - self.viewport.0 as f64 / 2.0, cy + sy as f64 - self.viewport.1 as f64 / 2.0)
+        (
+            cx + sx as f64 - self.viewport.0 as f64 / 2.0,
+            cy + sy as f64 - self.viewport.1 as f64 / 2.0,
+        )
     }
 
     /// Convert world pixels to a screen point.
     pub fn world_to_screen(&self, wx: f64, wy: f64) -> (f32, f32) {
         let (cx, cy) = self.world_center();
-        ((wx - cx + self.viewport.0 as f64 / 2.0) as f32, (wy - cy + self.viewport.1 as f64 / 2.0) as f32)
+        (
+            (wx - cx + self.viewport.0 as f64 / 2.0) as f32,
+            (wy - cy + self.viewport.1 as f64 / 2.0) as f32,
+        )
     }
 
     pub fn screen_to_lnglat(&self, sx: f32, sy: f32) -> LngLat {
@@ -201,7 +220,12 @@ mod tests {
         let anchor = c.screen_to_lnglat(300.0, 200.0);
         c.zoom_at(300.0, 200.0, 1.0);
         let after = c.screen_to_lnglat(300.0, 200.0);
-        assert!((after.lon - anchor.lon).abs() < 1e-6, "{} vs {}", after.lon, anchor.lon);
+        assert!(
+            (after.lon - anchor.lon).abs() < 1e-6,
+            "{} vs {}",
+            after.lon,
+            anchor.lon
+        );
         assert!((after.lat - anchor.lat).abs() < 1e-6);
         assert!((c.zoom - 11.8).abs() < 1e-9);
     }
@@ -233,6 +257,9 @@ mod tests {
         let before = c.screen_to_lnglat(480.0, 320.0);
         c.pan_by_screen(50.0, 0.0); // content moves right by 50px
         let after = c.screen_to_lnglat(480.0, 320.0);
-        assert!(after.lon < before.lon, "dragging right reveals land to the west");
+        assert!(
+            after.lon < before.lon,
+            "dragging right reveals land to the west"
+        );
     }
 }

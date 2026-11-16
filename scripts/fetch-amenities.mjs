@@ -28,7 +28,7 @@ const WIKIDATA_HAWKER_CLASS = "Q863425";
 const NEA_PHOTO_URL_RE = /^https?:\/\/www\.nea\.gov\.sg\/.+\.(?:jpe?g|png)$/i;
 
 async function fetchHawkers() {
-  const poll = await fetchJson(`https://api-open.data.gov.sg/v1/public/api/datasets/${HAWKER_DATASET}/poll-download`);
+  const poll = await fetchJson(`https://api-open.data.gov.sg/v1/data/api/datasets/${HAWKER_DATASET}/poll-download`);
   const url = poll?.data?.url;
   if (!url) throw new Error(`No presigned URL returned for ${HAWKER_DATASET}`);
   const data = await fetchJson(url);
@@ -212,8 +212,8 @@ const { places: hawkers } = await applyPhotoPicks(
 );
 const withPhotos = (places, source) => places.filter((place) => place.photos.some((photo) => photo.source === source)).length;
 const serialized = JSON.stringify({ hawkers, malls });
-await mkdir("public", { recursive: true });
-await writeFile("public/amenities.json", serialized);
+await mkdir("data", { recursive: true });
+await writeFile("data/amenities.json", serialized);
 console.log(
   `Amenities bundle: ${hawkers.length} hawker centres (${hawkers.filter((h) => h.status === "planned").length} planned; ` +
     `photos: ${withPhotos(hawkers, "commons")} Commons, ${withPhotos(hawkers, "nea")} NEA), ` +

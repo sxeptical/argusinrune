@@ -5,9 +5,7 @@ use std::collections::BTreeMap;
 
 use crate::format::singapore_today;
 use crate::mobility::plural;
-use crate::types::{
-    AvailabilityTone, HawkerCentre, HawkerClosure, Mall, PlacePhoto, PopupLine,
-};
+use crate::types::{AvailabilityTone, HawkerCentre, HawkerClosure, Mall, PlacePhoto, PopupLine};
 
 /// Turn common OpenStreetMap `opening_hours` shapes into plain English.
 /// Returns None for "off".
@@ -29,8 +27,13 @@ pub fn format_opening_hours(raw: &str) -> Option<String> {
     value = value.replacen("Mo-Su", "Daily", 1);
     // Replace day tokens with their abbreviations (word boundaries).
     for (code, name) in [
-        ("Mo", "Mon"), ("Tu", "Tue"), ("We", "Wed"), ("Th", "Thu"),
-        ("Fr", "Fri"), ("Sa", "Sat"), ("Su", "Sun"),
+        ("Mo", "Mon"),
+        ("Tu", "Tue"),
+        ("We", "Wed"),
+        ("Th", "Thu"),
+        ("Fr", "Fri"),
+        ("Sa", "Sat"),
+        ("Su", "Sun"),
     ] {
         value = replace_word(&value, code, name);
     }
@@ -54,23 +57,31 @@ fn replace_time_ranges(s: &str) -> String {
     let mut i = 0;
     while i < bytes.len() {
         if i + 5 <= bytes.len()
-            && is_digit(bytes[i]) && is_digit(bytes[i+1])
-            && bytes.get(i+2) == Some(&b':')
-            && is_digit(bytes[i+3]) && is_digit(bytes[i+4])
+            && is_digit(bytes[i])
+            && is_digit(bytes[i + 1])
+            && bytes.get(i + 2) == Some(&b':')
+            && is_digit(bytes[i + 3])
+            && is_digit(bytes[i + 4])
         {
             let mut j = i + 5;
-            while j < bytes.len() && bytes[j] == b' ' { j += 1; }
+            while j < bytes.len() && bytes[j] == b' ' {
+                j += 1;
+            }
             if bytes.get(j) == Some(&b'-') {
                 let mut k = j + 1;
-                while k < bytes.len() && bytes[k] == b' ' { k += 1; }
+                while k < bytes.len() && bytes[k] == b' ' {
+                    k += 1;
+                }
                 if k + 5 <= bytes.len()
-                    && is_digit(bytes[k]) && is_digit(bytes[k+1])
-                    && bytes.get(k+2) == Some(&b':')
-                    && is_digit(bytes[k+3]) && is_digit(bytes[k+4])
+                    && is_digit(bytes[k])
+                    && is_digit(bytes[k + 1])
+                    && bytes.get(k + 2) == Some(&b':')
+                    && is_digit(bytes[k + 3])
+                    && is_digit(bytes[k + 4])
                 {
-                    out.push_str(&s[i..i+5]);
+                    out.push_str(&s[i..i + 5]);
                     out.push('–');
-                    out.push_str(&s[k..k+5]);
+                    out.push_str(&s[k..k + 5]);
                     i = k + 5;
                     continue;
                 }
@@ -82,7 +93,9 @@ fn replace_time_ranges(s: &str) -> String {
     out
 }
 
-fn is_digit(b: u8) -> bool { b.is_ascii_digit() }
+fn is_digit(b: u8) -> bool {
+    b.is_ascii_digit()
+}
 
 /// Replace whole-word `word` in `s` with `replacement`.
 fn replace_word(s: &str, word: &str, replacement: &str) -> String {
@@ -105,7 +118,9 @@ fn replace_word(s: &str, word: &str, replacement: &str) -> String {
     }
     out
 }
-fn is_word_byte(b: u8) -> bool { b.is_ascii_alphanumeric() || b == b'_' }
+fn is_word_byte(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b == b'_'
+}
 
 const MONTHS: &[&str] = &[
     "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
@@ -176,18 +191,35 @@ pub fn describe_hawker_closure(
         .map(|s| format!(" — {}", s))
         .unwrap_or_default();
     let text = if current.is_some() {
-        format!("Closed now for {} until {}{}", kind, format_closure_range(&closure.end, &closure.end), remarks)
+        format!(
+            "Closed now for {} until {}{}",
+            kind,
+            format_closure_range(&closure.end, &closure.end),
+            remarks
+        )
     } else {
-        format!("Closed for {} {}{}", kind, format_closure_range(&closure.start, &closure.end), remarks)
+        format!(
+            "Closed for {} {}{}",
+            kind,
+            format_closure_range(&closure.start, &closure.end),
+            remarks
+        )
     };
-    Some(HawkerClosureStatus { current: current.is_some(), text })
+    Some(HawkerClosureStatus {
+        current: current.is_some(),
+        text,
+    })
 }
 
 pub fn describe_hawker_centre(hawker: &HawkerCentre, today_iso: &str) -> Vec<PopupLine> {
     let closure = describe_hawker_closure(&hawker.closures, today_iso);
     let mut lines = vec![PopupLine::new(&hawker.name, "name")];
     if hawker.status == crate::types::HawkerStatus::Open {
-        lines.push(PopupLine::toned("In operation", "status", AvailabilityTone::Success));
+        lines.push(PopupLine::toned(
+            "In operation",
+            "status",
+            AvailabilityTone::Success,
+        ));
     } else {
         let text = match hawker.expected_year {
             Some(year) => format!("Under construction · expected {}", year),
@@ -204,10 +236,15 @@ pub fn describe_hawker_centre(hawker: &HawkerCentre, today_iso: &str) -> Vec<Pop
         lines.push(PopupLine::toned(status.text, kind, tone));
     }
     if let Some(stalls) = hawker.stalls {
-        lines.push(PopupLine::new(plural(stalls, "cooked food stall", "cooked food stalls"), "count"));
+        lines.push(PopupLine::new(
+            plural(stalls, "cooked food stall", "cooked food stalls"),
+            "count",
+        ));
     }
-    if let Some(address) = &hawker.address {
-        if !address.is_empty() { lines.push(PopupLine::new(address, "detail")); }
+    if let Some(address) = &hawker.address
+        && !address.is_empty()
+    {
+        lines.push(PopupLine::new(address, "detail"));
     }
     lines.extend(credit_line(&hawker.photos));
     lines.push(PopupLine::new("Source: NEA via data.gov.sg", "hint"));
@@ -241,7 +278,11 @@ pub fn photo_credit(photos: &[PlacePhoto]) -> Option<String> {
         .collect();
     Some(format!(
         "{}: {} · Wikimedia Commons",
-        if commons.len() == 1 { "Photo" } else { "Photos" },
+        if commons.len() == 1 {
+            "Photo"
+        } else {
+            "Photos"
+        },
         groups.join("; ")
     ))
 }
@@ -263,12 +304,18 @@ pub fn describe_mall(mall: &Mall) -> Vec<PopupLine> {
         };
         lines.push(PopupLine::new(text, "count"));
     }
-    if let Some(mrt) = &mall.nearest_mrt {
-        if !mrt.is_empty() { lines.push(PopupLine::new(format!("Nearest MRT: {}", mrt), "detail")); }
+    if let Some(mrt) = &mall.nearest_mrt
+        && !mrt.is_empty()
+    {
+        lines.push(PopupLine::new(format!("Nearest MRT: {}", mrt), "detail"));
     }
-    if let Some(hours) = hours { lines.push(PopupLine::new(hours, "detail")); }
-    if let Some(address) = &mall.address {
-        if !address.is_empty() { lines.push(PopupLine::new(address, "detail")); }
+    if let Some(hours) = hours {
+        lines.push(PopupLine::new(hours, "detail"));
+    }
+    if let Some(address) = &mall.address
+        && !address.is_empty()
+    {
+        lines.push(PopupLine::new(address, "detail"));
     }
     lines.extend(credit_line(&mall.photos));
     let hint = if mall.stores.is_none() {
@@ -281,7 +328,9 @@ pub fn describe_mall(mall: &Mall) -> Vec<PopupLine> {
 }
 
 /// Re-export so callers can derive "today" without depending on `format`.
-pub fn today() -> String { singapore_today() }
+pub fn today() -> String {
+    singapore_today()
+}
 
 #[cfg(test)]
 mod tests {
@@ -289,14 +338,32 @@ mod tests {
 
     #[test]
     fn opening_hours_and_ranges() {
-        assert_eq!(format_opening_hours("Mo-Su 10:00-22:00").unwrap(), "Daily 10:00–22:00");
-        assert_eq!(format_opening_hours("Mo-Su,PH 10:00 - 22:00").unwrap(), "Daily 10:00–22:00");
-        assert_eq!(format_opening_hours("10:00-21:30").unwrap(), "Daily 10:00–21:30");
+        assert_eq!(
+            format_opening_hours("Mo-Su 10:00-22:00").unwrap(),
+            "Daily 10:00–22:00"
+        );
+        assert_eq!(
+            format_opening_hours("Mo-Su,PH 10:00 - 22:00").unwrap(),
+            "Daily 10:00–22:00"
+        );
+        assert_eq!(
+            format_opening_hours("10:00-21:30").unwrap(),
+            "Daily 10:00–21:30"
+        );
         assert_eq!(format_opening_hours("24/7").unwrap(), "Open 24 hours");
         assert_eq!(format_opening_hours("off"), None);
-        assert_eq!(format_opening_hours("Su-Th 10:00-22:00; Fr-Sa 10:00-23:00").unwrap(), "Sun-Thu 10:00–22:00, Fri-Sat 10:00–23:00");
-        assert_eq!(format_closure_range("2026-12-12", "2026-12-15"), "12–15 Dec");
-        assert_eq!(format_closure_range("2026-12-28", "2027-01-02"), "28 Dec 2026–2 Jan 2027");
+        assert_eq!(
+            format_opening_hours("Su-Th 10:00-22:00; Fr-Sa 10:00-23:00").unwrap(),
+            "Sun-Thu 10:00–22:00, Fri-Sat 10:00–23:00"
+        );
+        assert_eq!(
+            format_closure_range("2026-12-12", "2026-12-15"),
+            "12–15 Dec"
+        );
+        assert_eq!(
+            format_closure_range("2026-12-28", "2027-01-02"),
+            "28 Dec 2026–2 Jan 2027"
+        );
     }
 
     #[test]
@@ -304,11 +371,20 @@ mod tests {
         let photo = PlacePhoto {
             thumb: "https://thumb.wikimedia.org/a.jpg".into(),
             page: Some("https://commons.wikimedia.org/wiki/File:A.jpg".into()),
-            author: "Terence Ong".into(), license: Some("CC BY 2.5".into()),
-            source: crate::types::PlacePhotoSource::Commons, year: None,
+            author: "Terence Ong".into(),
+            license: Some("CC BY 2.5".into()),
+            source: crate::types::PlacePhotoSource::Commons,
+            year: None,
         };
-        assert_eq!(photo_credit(&[photo.clone()]).unwrap(), "Photo: Terence Ong (CC BY 2.5) · Wikimedia Commons");
-        let nea = PlacePhoto { source: crate::types::PlacePhotoSource::Nea, license: None, ..photo };
+        assert_eq!(
+            photo_credit(std::slice::from_ref(&photo)).unwrap(),
+            "Photo: Terence Ong (CC BY 2.5) · Wikimedia Commons"
+        );
+        let nea = PlacePhoto {
+            source: crate::types::PlacePhotoSource::Nea,
+            license: None,
+            ..photo
+        };
         assert_eq!(photo_credit(&[nea]).unwrap(), "Photo: NEA");
     }
 }

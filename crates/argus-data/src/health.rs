@@ -4,11 +4,7 @@
 //! needs to distinguish a stale snapshot and a missing API key, so those are
 //! separate states here. `last_updated_ms` is epoch milliseconds.
 
-use std::{
-    collections::HashMap,
-    sync::Mutex,
-    time::Duration,
-};
+use std::{collections::HashMap, sync::Mutex, time::Duration};
 
 use serde::{Deserialize, Serialize};
 
@@ -129,10 +125,17 @@ impl HealthRegistry {
         Self::default()
     }
 
-    fn status_for(source: Source, status: HealthStatus, message: Option<String>, last: Option<i64>) -> SourceHealth {
+    fn status_for(
+        source: Source,
+        status: HealthStatus,
+        message: Option<String>,
+        last: Option<i64>,
+    ) -> SourceHealth {
         let status = if status == HealthStatus::Ok {
             match last {
-                Some(ts) if now_millis().saturating_sub(ts) > source.ttl().as_millis() as i64 * 2 => {
+                Some(ts)
+                    if now_millis().saturating_sub(ts) > source.ttl().as_millis() as i64 * 2 =>
+                {
                     HealthStatus::Stale
                 }
                 _ => HealthStatus::Ok,
@@ -174,14 +177,21 @@ impl HealthRegistry {
     }
 
     pub fn mark_unconfigured(&self, source: Source, message: impl Into<String>) {
-        let entry = Self::status_for(source, HealthStatus::Unconfigured, Some(message.into()), None);
+        let entry = Self::status_for(
+            source,
+            HealthStatus::Unconfigured,
+            Some(message.into()),
+            None,
+        );
         self.entries.lock().unwrap().insert(source, entry);
     }
 
     pub fn get(&self, source: Source) -> SourceHealth {
         let existing = self.entries.lock().unwrap().get(&source).cloned();
         match existing {
-            Some(entry) => Self::status_for(source, entry.status, entry.message, entry.last_updated_ms),
+            Some(entry) => {
+                Self::status_for(source, entry.status, entry.message, entry.last_updated_ms)
+            }
             None => SourceHealth {
                 source,
                 label: source.label(),

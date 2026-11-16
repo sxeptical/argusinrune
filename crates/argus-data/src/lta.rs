@@ -15,8 +15,8 @@ use argus_core::{
     },
     mrt_network::lta_line_display_name,
     types::{
-        CarparkAvailability, EvChargingLocation, TrainAlertStatus, TrainServiceAlert,
-        TrafficCamera, TrafficIncident,
+        CarparkAvailability, EvChargingLocation, TrafficCamera, TrafficIncident, TrainAlertStatus,
+        TrainServiceAlert,
     },
 };
 use serde::{Deserialize, de::DeserializeOwned};
@@ -39,8 +39,7 @@ const SAFE_CAMERA_HOSTS: &[&str] = &[
     "https://datamall2.mytransport.sg/",
     "https://dm-traffic-camera-itsc.s3.ap-southeast-1.amazonaws.com/",
 ];
-const SAFE_EV_BATCH_PREFIX: &str =
-    "https://dmprod-datasets.s3.ap-southeast-1.amazonaws.com/";
+const SAFE_EV_BATCH_PREFIX: &str = "https://dmprod-datasets.s3.ap-southeast-1.amazonaws.com/";
 
 #[derive(Deserialize)]
 struct ValuePage<A> {
@@ -64,10 +63,7 @@ pub fn normalize_traffic_incidents(rows: &[RawTrafficIncident]) -> Vec<TrafficIn
     rows.iter()
         .filter(|i| i.latitude.is_finite() && i.longitude.is_finite())
         .map(|i| TrafficIncident {
-            id: short_hash(&format!(
-                "{}|{}|{}",
-                i.message, i.latitude, i.longitude
-            )),
+            id: short_hash(&format!("{}|{}|{}", i.message, i.latitude, i.longitude)),
             incident_type: i.incident_type.clone(),
             lat: i.latitude,
             lng: i.longitude,
@@ -108,7 +104,12 @@ pub fn normalize_train_service_alerts(
             let mut lines: Vec<String> = Vec::new();
             let mut stations: Vec<String> = Vec::new();
             for segment in &segments {
-                if let Some(line) = segment.line.as_ref().map(|l| l.trim()).filter(|l| !l.is_empty()) {
+                if let Some(line) = segment
+                    .line
+                    .as_ref()
+                    .map(|l| l.trim())
+                    .filter(|l| !l.is_empty())
+                {
                     let name = lta_line_display_name(line);
                     if !lines.contains(&name) {
                         lines.push(name);
@@ -140,16 +141,16 @@ pub fn normalize_train_service_alerts(
 }
 
 /// Merge the per-lot-type DataMall rows into one entry per carpark.
-pub fn normalize_carpark_availability(
-    rows: &[RawCarparkAvailability],
-) -> Vec<CarparkAvailability> {
+pub fn normalize_carpark_availability(rows: &[RawCarparkAvailability]) -> Vec<CarparkAvailability> {
     let mut result: Vec<CarparkAvailability> = Vec::new();
     let mut index: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     for row in rows {
         let mut coords = row.location.split_whitespace();
         let lat = coords.next().and_then(|v| v.parse::<f64>().ok());
         let lng = coords.next().and_then(|v| v.parse::<f64>().ok());
-        let (Some(lat), Some(lng)) = (lat, lng) else { continue };
+        let (Some(lat), Some(lng)) = (lat, lng) else {
+            continue;
+        };
         if !lat.is_finite() || !lng.is_finite() {
             continue;
         }
@@ -209,26 +210,38 @@ pub fn normalize_ev_charging_locations(rows: &[RawEvLocation]) -> Vec<EvCharging
             let mut operators: Vec<String> = Vec::new();
             let mut plug_types: Vec<String> = Vec::new();
             for point in &row.charging_points {
-                if let Some(op) = point.operator.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
-                    if !operators.iter().any(|o| o == op) {
-                        operators.push(op.to_string());
-                    }
+                if let Some(op) = point
+                    .operator
+                    .as_ref()
+                    .map(|s| s.trim())
+                    .filter(|s| !s.is_empty())
+                    && !operators.iter().any(|o| o == op)
+                {
+                    operators.push(op.to_string());
                 }
                 for plug in &point.plug_types {
-                    if let Some(pt) = plug.plug_type.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
-                        if !plug_types.iter().any(|p| p == pt) {
-                            plug_types.push(pt.to_string());
-                        }
+                    if let Some(pt) = plug
+                        .plug_type
+                        .as_ref()
+                        .map(|s| s.trim())
+                        .filter(|s| !s.is_empty())
+                        && !plug_types.iter().any(|p| p == pt)
+                    {
+                        plug_types.push(pt.to_string());
                     }
-                    if plug.current.as_deref().is_some_and(|c| c.eq_ignore_ascii_case("DC")) {
+                    if plug
+                        .current
+                        .as_deref()
+                        .is_some_and(|c| c.eq_ignore_ascii_case("DC"))
+                    {
                         has_dc = true;
                     }
-                    if let Some(raw) = plug.power_rating.as_ref().filter(|s| !s.is_empty()) {
-                        if let Ok(power) = raw.parse::<f64>() {
-                            if power.is_finite() && power > max_power_kw.unwrap_or(0.0) {
-                                max_power_kw = Some(power);
-                            }
-                        }
+                    if let Some(raw) = plug.power_rating.as_ref().filter(|s| !s.is_empty())
+                        && let Ok(power) = raw.parse::<f64>()
+                        && power.is_finite()
+                        && power > max_power_kw.unwrap_or(0.0)
+                    {
+                        max_power_kw = Some(power);
                     }
                     for charger in &plug.ev_ids {
                         total += 1;
@@ -318,10 +331,9 @@ impl Client {
         timeout_ms: u64,
     ) -> Result<Vec<A>> {
         collect_lta_pages(
-            |skip| match self.lta_get::<ValuePage<A>>(
-                &format!("{endpoint}?$skip={skip}"),
-                timeout_ms,
-            ) {
+            |skip| match self
+                .lta_get::<ValuePage<A>>(&format!("{endpoint}?$skip={skip}"), timeout_ms)
+            {
                 Ok(page) => Ok(Some(page.value)),
                 Err(e) if e.is_not_found() => Ok(None),
                 Err(e) => Err(e),
@@ -333,77 +345,78 @@ impl Client {
     }
 
     pub fn get_bus_stops(&self) -> Result<Vec<argus_core::types::BusStop>> {
-        let result = self.cache.get("bus-stops", Duration::from_secs(24 * 60 * 60), || {
-            self.collect_lta_endpoint::<argus_core::api_types::LtaBusStopRow>(
-                "/BusStops", 500, 20, BUS_STOPS_TIMEOUT_MS,
-            )
-            .map(|rows| {
-                rows.into_iter()
-                    .map(|r| argus_core::types::BusStop {
-                        bus_stop_code: r.bus_stop_code,
-                        road_name: r.road_name,
-                        description: r.description,
-                        latitude: r.latitude,
-                        longitude: r.longitude,
-                    })
-                    .collect()
-            })
-        });
+        let result = self
+            .cache
+            .get("bus-stops", Duration::from_secs(24 * 60 * 60), || {
+                self.collect_lta_endpoint::<argus_core::api_types::LtaBusStopRow>(
+                    "/BusStops",
+                    500,
+                    20,
+                    BUS_STOPS_TIMEOUT_MS,
+                )
+                .map(|rows| {
+                    rows.into_iter()
+                        .map(|r| argus_core::types::BusStop {
+                            bus_stop_code: r.bus_stop_code,
+                            road_name: r.road_name,
+                            description: r.description,
+                            latitude: r.latitude,
+                            longitude: r.longitude,
+                        })
+                        .collect()
+                })
+            });
         self.finish(Source::BusStops, result)
     }
 
     pub fn get_bus_arrivals(&self, stop_id: &str) -> Result<Vec<argus_core::types::BusArrival>> {
         crate::validate_bus_stop_id(stop_id)?;
         let key = format!("bus-arrivals-{stop_id}");
-        let result = self.cache.get(
-            &key,
-            Duration::from_secs(15),
-            || {
-                let response = self.lta_get::<LtaBusArrivalsResponse>(
-                    &format!(
-                        "/v3/BusArrival?BusStopCode={}",
-                        urlencode(stop_id)
-                    ),
-                    DEFAULT_TIMEOUT_MS,
-                )?;
-                Ok(response.services)
-            },
-        );
+        let result = self.cache.get(&key, Duration::from_secs(15), || {
+            let response = self.lta_get::<LtaBusArrivalsResponse>(
+                &format!("/v3/BusArrival?BusStopCode={}", urlencode(stop_id)),
+                DEFAULT_TIMEOUT_MS,
+            )?;
+            Ok(response.services)
+        });
         self.finish(Source::BusArrivals, result)
     }
 
     pub fn get_traffic_cameras(&self) -> Result<Vec<TrafficCamera>> {
-        let result = self.cache.get("traffic-cameras", Duration::from_secs(60), || {
-            let payload = match self.lta_get::<WireTrafficImagesResponse>(
-                "/Traffic-Imagesv2",
-                DEFAULT_TIMEOUT_MS,
-            ) {
-                Ok(p) => p,
-                Err(e) if e.is_not_found() => return Ok(vec![]),
-                Err(e) => return Err(e),
-            };
-            Ok(payload
-                .into_cameras()
-                .into_iter()
-                .filter(|c| c.latitude.is_finite() && c.longitude.is_finite() && is_safe_camera_url(&c.image_link))
-                .map(|c| TrafficCamera {
-                    camera_id: c.camera_id.clone(),
-                    latitude: c.latitude,
-                    longitude: c.longitude,
-                    image_link: c.image_link,
-                    location: format!("Camera {}", c.camera_id),
-                })
-                .collect())
-        });
+        let result = self
+            .cache
+            .get("traffic-cameras", Duration::from_secs(60), || {
+                let payload = match self
+                    .lta_get::<WireTrafficImagesResponse>("/Traffic-Imagesv2", DEFAULT_TIMEOUT_MS)
+                {
+                    Ok(p) => p,
+                    Err(e) if e.is_not_found() => return Ok(vec![]),
+                    Err(e) => return Err(e),
+                };
+                Ok(payload
+                    .into_cameras()
+                    .into_iter()
+                    .filter(|c| {
+                        c.latitude.is_finite()
+                            && c.longitude.is_finite()
+                            && is_safe_camera_url(&c.image_link)
+                    })
+                    .map(|c| TrafficCamera {
+                        camera_id: c.camera_id.clone(),
+                        latitude: c.latitude,
+                        longitude: c.longitude,
+                        image_link: c.image_link,
+                        location: format!("Camera {}", c.camera_id),
+                    })
+                    .collect())
+            });
         self.finish(Source::Cameras, result)
     }
 
     pub fn get_traffic_incidents(&self) -> Result<Vec<TrafficIncident>> {
         let result = self.cache.get("incidents", Duration::from_secs(60), || {
-            let payload = self.lta_get::<LtaTrafficIncidentsResponse>(
-                "/TrafficIncidents",
-                DEFAULT_TIMEOUT_MS,
-            )?;
+            let payload = self
+                .lta_get::<LtaTrafficIncidentsResponse>("/TrafficIncidents", DEFAULT_TIMEOUT_MS)?;
             Ok(normalize_traffic_incidents(&payload.value))
         });
         self.finish(Source::Incidents, result)
@@ -423,10 +436,11 @@ impl Client {
     }
 
     pub fn get_carpark_availability(&self) -> Result<Vec<CarparkAvailability>> {
-        let result = self.cache.get("carpark-availability", Duration::from_secs(60), || {
-            let rows = collect_lta_pages(
-                |skip| {
-                    match self.lta_get::<WireCarparkResponse>(
+        let result = self
+            .cache
+            .get("carpark-availability", Duration::from_secs(60), || {
+                let rows = collect_lta_pages(
+                    |skip| match self.lta_get::<WireCarparkResponse>(
                         &format!("/CarParkAvailabilityv2?$skip={skip}"),
                         CARPARKS_TIMEOUT_MS,
                     ) {
@@ -438,34 +452,41 @@ impl Client {
                         )),
                         Err(e) if e.is_not_found() => Ok(None),
                         Err(e) => Err(e),
-                    }
-                },
-                500,
-                12,
-                "lta",
-            )?;
-            Ok(normalize_carpark_availability(&rows))
-        });
+                    },
+                    500,
+                    12,
+                    "lta",
+                )?;
+                Ok(normalize_carpark_availability(&rows))
+            });
         self.finish(Source::Carparks, result)
     }
 
     pub fn get_ev_charging_locations(&self) -> Result<Vec<EvChargingLocation>> {
-        let result = self.cache.get("ev-charging-locations", Duration::from_secs(5 * 60), || {
-            let batch = self.lta_get::<LtaEvcBatchResponse>("/EVCBatch", DEFAULT_TIMEOUT_MS)?;
-            let link = batch.value.first().map(|row| row.link.as_str());
-            let link = link.filter(|l| is_trusted_ev_batch_link(l)).ok_or_else(|| {
-                Error::external("lta", 502, "EVCBatch did not return a trusted snapshot link")
-            })?;
-            // The presigned link carries its own auth; never forward AccountKey.
-            let file = self.http.get_json::<WireEvBatchFile>(
-                "lta-ev-batch",
-                link,
-                &[("Accept", "application/json")],
-                EV_BATCH_TIMEOUT_MS,
-            )?;
-            let file: argus_core::api_types::LtaEvBatchFile = file.into();
-            Ok(normalize_ev_charging_locations(&file.ev_locations_data))
-        });
+        let result = self
+            .cache
+            .get("ev-charging-locations", Duration::from_secs(5 * 60), || {
+                let batch = self.lta_get::<LtaEvcBatchResponse>("/EVCBatch", DEFAULT_TIMEOUT_MS)?;
+                let link = batch.value.first().map(|row| row.link.as_str());
+                let link = link
+                    .filter(|l| is_trusted_ev_batch_link(l))
+                    .ok_or_else(|| {
+                        Error::external(
+                            "lta",
+                            502,
+                            "EVCBatch did not return a trusted snapshot link",
+                        )
+                    })?;
+                // The presigned link carries its own auth; never forward AccountKey.
+                let file = self.http.get_json::<WireEvBatchFile>(
+                    "lta-ev-batch",
+                    link,
+                    &[("Accept", "application/json")],
+                    EV_BATCH_TIMEOUT_MS,
+                )?;
+                let file: argus_core::api_types::LtaEvBatchFile = file.into();
+                Ok(normalize_ev_charging_locations(&file.ev_locations_data))
+            });
         self.finish(Source::EvChargers, result)
     }
 }
@@ -487,15 +508,13 @@ fn urlencode(value: &str) -> String {
 mod tests {
     use super::*;
     use argus_core::api_types::{
-        EvChargingPoint, EvId, EvPlugType, LtaTrainAlert, MessageContent,
-        StationList, TrainAlertSegment,
+        EvChargingPoint, EvId, EvPlugType, LtaTrainAlert, MessageContent, StationList,
+        TrainAlertSegment,
     };
 
     #[test]
     fn camera_url_allowlist() {
-        assert!(is_safe_camera_url(
-            "https://images.data.gov.sg/c1.jpg"
-        ));
+        assert!(is_safe_camera_url("https://images.data.gov.sg/c1.jpg"));
         assert!(is_safe_camera_url(
             "https://dm-traffic-camera-itsc.s3.ap-southeast-1.amazonaws.com/cam.jpg"
         ));
@@ -562,8 +581,12 @@ mod tests {
                     current: Some("DC".into()),
                     power_rating: Some("50".into()),
                     ev_ids: vec![
-                        EvId { status: Some("1".into()) },
-                        EvId { status: Some("0".into()) },
+                        EvId {
+                            status: Some("1".into()),
+                        },
+                        EvId {
+                            status: Some("0".into()),
+                        },
                     ],
                 }],
             }],
@@ -584,7 +607,9 @@ mod tests {
             value: vec![LtaTrainAlert {
                 status: Some(NumberOrString::Number(2.0)),
                 message: Some(vec![
-                    MessageContent { content: Some(" No service ".into()) },
+                    MessageContent {
+                        content: Some(" No service ".into()),
+                    },
                     MessageContent { content: None },
                 ]),
                 affected_segments: Some(vec![
@@ -635,6 +660,8 @@ mod tests {
         assert!(is_trusted_ev_batch_link(
             "https://dmprod-datasets.s3.ap-southeast-1.amazonaws.com/ev-batch/EVBatch.json"
         ));
-        assert!(!is_trusted_ev_batch_link("https://evil.example/EVBatch.json"));
+        assert!(!is_trusted_ev_batch_link(
+            "https://evil.example/EVBatch.json"
+        ));
     }
 }

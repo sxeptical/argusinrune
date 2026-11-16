@@ -6,7 +6,10 @@ use std::sync::Arc;
 
 use rune::Waker;
 
-use crate::camera::{DEFAULT_CENTER, DEFAULT_ZOOM, LatLngBounds, LngLat, MapCamera, MIN_ZOOM, MAX_ZOOM, SINGAPORE_BOUNDS};
+use crate::camera::{
+    DEFAULT_CENTER, DEFAULT_ZOOM, LatLngBounds, LngLat, MAX_ZOOM, MIN_ZOOM, MapCamera,
+    SINGAPORE_BOUNDS,
+};
 use crate::overlay::{ClusterOptions, OverlayId, Overlays};
 use crate::projection::TileCoord;
 use crate::tile::{TileSource, TileStore};
@@ -190,7 +193,10 @@ impl MapState {
         self.last_pointer = (x, y);
         if clicks >= 2 {
             self.camera.zoom_step(x, y, 1);
-            self.push_message(MapMsg::CameraChanged { center: self.camera.center, zoom: self.camera.zoom });
+            self.push_message(MapMsg::CameraChanged {
+                center: self.camera.center,
+                zoom: self.camera.zoom,
+            });
             self.dragging = false;
             self.last_drag = Some((x, y));
             return;
@@ -224,7 +230,10 @@ impl MapState {
         }
         let travelled = start.map_or(0.0, |(sx, sy)| ((x - sx).powi(2) + (y - sy).powi(2)).sqrt());
         if travelled > 4.0 {
-            self.push_message(MapMsg::CameraChanged { center: self.camera.center, zoom: self.camera.zoom });
+            self.push_message(MapMsg::CameraChanged {
+                center: self.camera.center,
+                zoom: self.camera.zoom,
+            });
             return;
         }
         if self.geo_filter_picking {
@@ -247,14 +256,20 @@ impl MapState {
         self.last_pointer = (x, y);
         let delta = (-dy * 0.002).clamp(-1.0, 1.0);
         self.camera.zoom_at(x, y, delta as f64);
-        self.push_message(MapMsg::CameraChanged { center: self.camera.center, zoom: self.camera.zoom });
+        self.push_message(MapMsg::CameraChanged {
+            center: self.camera.center,
+            zoom: self.camera.zoom,
+        });
     }
 
     /// Trackpad pinch zoom around the cursor.
     pub fn magnify(&mut self, x: f32, y: f32, delta: f32) {
         self.last_pointer = (x, y);
         self.camera.zoom_at(x, y, (delta * 2.0) as f64);
-        self.push_message(MapMsg::CameraChanged { center: self.camera.center, zoom: self.camera.zoom });
+        self.push_message(MapMsg::CameraChanged {
+            center: self.camera.center,
+            zoom: self.camera.zoom,
+        });
     }
 
     /// Last pointer position in map-local points. The app uses this to place
@@ -287,7 +302,10 @@ impl MapState {
         self.camera.center = center;
         self.camera.zoom = zoom;
         self.camera.clamp();
-        self.push_message(MapMsg::CameraChanged { center: self.camera.center, zoom: self.camera.zoom });
+        self.push_message(MapMsg::CameraChanged {
+            center: self.camera.center,
+            zoom: self.camera.zoom,
+        });
     }
 }
 
@@ -319,7 +337,11 @@ mod tests {
         s.pointer_up(240.0, 150.0, false, 1);
         assert_eq!(s.selected, None);
         assert!(s.camera.center.lon < before.lon);
-        assert!(s.drain_messages().iter().any(|m| matches!(m, MapMsg::CameraChanged { .. })));
+        assert!(
+            s.drain_messages()
+                .iter()
+                .any(|m| matches!(m, MapMsg::CameraChanged { .. }))
+        );
     }
 
     #[test]

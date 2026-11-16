@@ -10,7 +10,7 @@ const datasets = {
   pcn: "d_a69ef89737379f231d2ae93fd1c5707f",
   parks: "d_77d7ec97be83d44f61b85454f844382f",
 };
-const endpoint = (id) => `https://api-open.data.gov.sg/v1/public/api/datasets/${id}/poll-download`;
+const endpoint = (id) => `https://api-open.data.gov.sg/v1/data/api/datasets/${id}/poll-download`;
 const fetchJson = async (url) => {
   const response = await fetch(url, { signal: AbortSignal.timeout(180_000) });
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}: ${url}`);
@@ -83,6 +83,6 @@ const serialized = JSON.stringify(output);
 const bytes = Buffer.byteLength(serialized);
 const counts = Object.fromEntries(["park", "pcn", "trail"].map((kind) => [kind, output.features.filter((f) => f.properties.kind === kind).length]));
 if (bytes > 2_000_000) throw new Error(`parks-geometry.json exceeds 2.0 MB (${bytes} bytes); breakdown ${JSON.stringify(counts)}`);
-await mkdir("public", { recursive: true });
-await writeFile("public/parks-geometry.json", serialized);
+await mkdir("data", { recursive: true });
+await writeFile("data/parks-geometry.json", serialized);
 console.log(`Recreation bundle: ${JSON.stringify(counts)}, ${bytes} bytes`);

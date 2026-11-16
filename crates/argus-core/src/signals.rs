@@ -3,7 +3,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-use crate::types::{TrafficIncident, TrainServiceAlert, TrainAlertStatus, WeatherData};
+use crate::types::{TrafficIncident, TrainAlertStatus, TrainServiceAlert, WeatherData};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -51,7 +51,8 @@ fn concise_message(message: &str) -> String {
     let mut split_at = None;
     for (i, c) in bytes.iter().enumerate() {
         if matches!(c, b'.' | b'!' | b'?') {
-            let next_is_boundary = i + 1 == bytes.len() || bytes.get(i + 1).map_or(false, |b| b.is_ascii_whitespace());
+            let next_is_boundary =
+                i + 1 == bytes.len() || bytes.get(i + 1).is_some_and(|b| b.is_ascii_whitespace());
             if next_is_boundary {
                 split_at = Some(i);
                 break;
@@ -61,7 +62,11 @@ fn concise_message(message: &str) -> String {
     if let Some(i) = split_at {
         fragment = trimmed[..i].trim();
     }
-    let chosen = if fragment.is_empty() { trimmed } else { fragment };
+    let chosen = if fragment.is_empty() {
+        trimmed
+    } else {
+        fragment
+    };
     chosen.chars().take(100).collect()
 }
 
@@ -82,7 +87,11 @@ fn rail_signal_id(alert: &TrainServiceAlert) -> String {
         sorted.sort();
         sorted.join(",")
     };
-    format!("rail:{}:{}", lines, alert.start_time.as_deref().unwrap_or("unknown"))
+    format!(
+        "rail:{}:{}",
+        lines,
+        alert.start_time.as_deref().unwrap_or("unknown")
+    )
 }
 
 pub struct DigestInput<'a> {
@@ -94,7 +103,11 @@ pub struct DigestInput<'a> {
 /// `buildSignalDigest` — rail, then road, then weather signals.
 pub fn build_signal_digest(input: &DigestInput<'_>) -> Vec<SignalRow> {
     let mut rows = Vec::new();
-    for alert in input.train_alerts.iter().filter(|a| a.status == TrainAlertStatus::Disrupted) {
+    for alert in input
+        .train_alerts
+        .iter()
+        .filter(|a| a.status == TrainAlertStatus::Disrupted)
+    {
         let label = if alert.affected_lines.is_empty() {
             "MRT Network".to_string()
         } else {
@@ -115,15 +128,19 @@ pub fn build_signal_digest(input: &DigestInput<'_>) -> Vec<SignalRow> {
             text: incident.message.clone(),
         });
     }
-    if let Some(psi) = input.weather.psi {
-        if psi > 100.0 {
-            rows.push(SignalRow {
-                id: "weather:psi-unhealthy".into(),
-                category: SignalCategory::Weather,
-                tone: SignalTone::Danger,
-                text: format!("PSI {} ({})", format_number(psi), input.weather.psi_status.as_str()),
-            });
-        }
+    if let Some(psi) = input.weather.psi
+        && psi > 100.0
+    {
+        rows.push(SignalRow {
+            id: "weather:psi-unhealthy".into(),
+            category: SignalCategory::Weather,
+            tone: SignalTone::Danger,
+            text: format!(
+                "PSI {} ({})",
+                format_number(psi),
+                input.weather.psi_status.as_str()
+            ),
+        });
     }
     rows
 }
@@ -152,7 +169,12 @@ pub struct NotificationPrefs {
 
 impl Default for NotificationPrefs {
     fn default() -> Self {
-        Self { rail: true, road: true, weather: true, browser: false }
+        Self {
+            rail: true,
+            road: true,
+            weather: true,
+            browser: false,
+        }
     }
 }
 
@@ -169,7 +191,11 @@ pub struct SignalsLoaded {
 
 impl SignalsLoaded {
     pub fn all_loaded() -> Self {
-        Self { rail: true, road: true, weather: true }
+        Self {
+            rail: true,
+            road: true,
+            weather: true,
+        }
     }
     fn get(&self, category: SignalCategory) -> bool {
         match category {
@@ -361,16 +387,25 @@ mod tests {
             end_time: None,
         }];
         let incidents = vec![TrafficIncident {
-            id: "1".into(), incident_type: "Accident".into(),
-            lat: 1.0, lng: 103.0, message: "Road blocked".into(),
+            id: "1".into(),
+            incident_type: "Accident".into(),
+            lat: 1.0,
+            lng: 103.0,
+            message: "Road blocked".into(),
         }];
         let w = weather(PsiStatus::Unhealthy, Some(151.0));
         let digest = build_signal_digest(&DigestInput {
-            train_alerts: &alerts, incidents: &incidents, weather: &w,
+            train_alerts: &alerts,
+            incidents: &incidents,
+            weather: &w,
         });
         assert_eq!(
             digest.iter().map(|r| r.category).collect::<Vec<_>>(),
-            [SignalCategory::Rail, SignalCategory::Road, SignalCategory::Weather]
+            [
+                SignalCategory::Rail,
+                SignalCategory::Road,
+                SignalCategory::Weather
+            ]
         );
         assert_eq!(digest[0].text, "EWL, NSL: No service");
         assert_eq!(digest[2].text, "PSI 151 (Unhealthy)");
@@ -380,15 +415,47 @@ mod tests {
     #[test]
     fn digest_tones_and_psi_threshold_and_stable_ids() {
         let incidents = vec![
-            TrafficIncident { id: "1".into(), incident_type: "Accident".into(), lat: 1.0, lng: 103.0, message: "a".into() },
-            TrafficIncident { id: "2".into(), incident_type: "Vehicle Breakdown".into(), lat: 1.0, lng: 103.0, message: "b".into() },
-            TrafficIncident { id: "3".into(), incident_type: "Other".into(), lat: 1.0, lng: 103.0, message: "c".into() },
+            TrafficIncident {
+                id: "1".into(),
+                incident_type: "Accident".into(),
+                lat: 1.0,
+                lng: 103.0,
+                message: "a".into(),
+            },
+            TrafficIncident {
+                id: "2".into(),
+                incident_type: "Vehicle Breakdown".into(),
+                lat: 1.0,
+                lng: 103.0,
+                message: "b".into(),
+            },
+            TrafficIncident {
+                id: "3".into(),
+                incident_type: "Other".into(),
+                lat: 1.0,
+                lng: 103.0,
+                message: "c".into(),
+            },
         ];
         let good = weather(PsiStatus::Good, Some(42.0));
-        let digest = build_signal_digest(&DigestInput { train_alerts: &[], incidents: &incidents, weather: &good });
-        assert_eq!(digest.iter().map(|r| r.tone.clone()).collect::<Vec<_>>(), [SignalTone::Danger, SignalTone::Warning, SignalTone::Muted]);
+        let digest = build_signal_digest(&DigestInput {
+            train_alerts: &[],
+            incidents: &incidents,
+            weather: &good,
+        });
+        assert_eq!(
+            digest.iter().map(|r| r.tone).collect::<Vec<_>>(),
+            [SignalTone::Danger, SignalTone::Warning, SignalTone::Muted]
+        );
         let moderate = weather(PsiStatus::Moderate, Some(100.0));
-        assert!(build_signal_digest(&DigestInput { train_alerts: &[], incidents: &[], weather: &moderate }).is_empty());
+        assert!(
+            build_signal_digest(&DigestInput {
+                train_alerts: &[],
+                incidents: &[],
+                weather: &moderate
+            })
+            .is_empty()
+        );
     }
 
     #[test]
@@ -404,7 +471,10 @@ mod tests {
         let mut baseline = SeenSignals::new();
         baseline.insert(SignalCategory::Road, vec!["a".into()]);
         let (fresh, _) = diff_signals(&baseline, &[a, b], &all);
-        assert_eq!(fresh.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(), ["b"]);
+        assert_eq!(
+            fresh.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(),
+            ["b"]
+        );
     }
 
     #[test]
@@ -417,10 +487,19 @@ mod tests {
             signal("p", SignalCategory::Weather, SignalTone::Danger),
         ];
         let mut baseline = SeenSignals::new();
-        for cat in SIGNAL_CATEGORIES { baseline.insert(cat, Vec::new()); }
+        for cat in SIGNAL_CATEGORIES {
+            baseline.insert(cat, Vec::new());
+        }
         let (fresh, _) = diff_signals(&baseline, &signals, &all);
-        assert_eq!(fresh.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(), ["r", "r2", "p", "a"]);
-        let partial = SignalsLoaded { rail: true, road: false, weather: false };
+        assert_eq!(
+            fresh.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(),
+            ["r", "r2", "p", "a"]
+        );
+        let partial = SignalsLoaded {
+            rail: true,
+            road: false,
+            weather: false,
+        };
         let (_, seen) = diff_signals(&SeenSignals::new(), &signals, &partial);
         assert!(!seen.contains_key(&SignalCategory::Road));
     }
@@ -431,9 +510,15 @@ mod tests {
             signal("crash", SignalCategory::Road, SignalTone::Danger),
             signal("breakdown", SignalCategory::Road, SignalTone::Warning),
         ];
-        let scoped: HashSet<String> = ["crash", "breakdown"].iter().map(|s| s.to_string()).collect();
+        let scoped: HashSet<String> = ["crash", "breakdown"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         let out = select_notifiable(&fresh, &NotificationPrefs::default(), &scoped);
-        assert_eq!(out.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(), ["crash"]);
+        assert_eq!(
+            out.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(),
+            ["crash"]
+        );
     }
 
     #[test]
@@ -441,10 +526,22 @@ mod tests {
         let old = signal("old", SignalCategory::Road, SignalTone::Danger);
         let kept = signal("kept", SignalCategory::Road, SignalTone::Danger);
         let new = signal("new", SignalCategory::Road, SignalTone::Danger);
-        let merged = merge_active_signals(&[old, kept.clone()], &[new.clone()], &[kept.clone(), new.clone()]).unwrap();
-        assert_eq!(merged.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(), ["kept", "new"]);
-        assert!(merge_active_signals(&[kept.clone()], &[], &[kept]).is_none());
-        let burst: Vec<_> = ["a", "b", "c", "d"].iter().map(|id| signal(id, SignalCategory::Road, SignalTone::Danger)).collect();
+        let merged = merge_active_signals(
+            &[old, kept.clone()],
+            std::slice::from_ref(&new),
+            &[kept.clone(), new.clone()],
+        )
+        .unwrap();
+        assert_eq!(
+            merged.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(),
+            ["kept", "new"]
+        );
+        let one = [kept];
+        assert!(merge_active_signals(&one, &[], &one).is_none());
+        let burst: Vec<_> = ["a", "b", "c", "d"]
+            .iter()
+            .map(|id| signal(id, SignalCategory::Road, SignalTone::Danger))
+            .collect();
         let summary = build_browser_notifications(&burst);
         assert_eq!(summary.len(), 1);
         assert_eq!(summary[0].title, "4 new ARGUS signals");

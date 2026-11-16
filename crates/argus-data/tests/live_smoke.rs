@@ -14,7 +14,11 @@ fn report<T>(label: &str, client: &Client, result: Result<T>, len: impl Fn(&T) -
             len(&value),
             client.source(argus_data::Source::from_label(label)).status
         ),
-        Err(err) => eprintln!("SMOKE {label}: ERROR status={} message={}", err.status(), err.message()),
+        Err(err) => eprintln!(
+            "SMOKE {label}: ERROR status={} message={}",
+            err.status(),
+            err.message()
+        ),
     }
 }
 
@@ -61,7 +65,9 @@ fn bus_arrivals() {
 #[ignore = "live network + real API keys"]
 fn bus_routes() {
     let c = Client::new();
-    report("bus-routes", &c, c.get_bus_route("12", None), |v| v.directions.len());
+    report("bus-routes", &c, c.get_bus_route("12", None), |v| {
+        v.directions.len()
+    });
 }
 
 #[test]
@@ -89,7 +95,9 @@ fn carparks() {
 #[ignore = "live network + real API keys"]
 fn ev_chargers() {
     let c = Client::new();
-    report("ev-chargers", &c, c.get_ev_charging_locations(), |v| v.len());
+    report("ev-chargers", &c, c.get_ev_charging_locations(), |v| {
+        v.len()
+    });
 }
 
 #[test]
@@ -117,7 +125,9 @@ fn flights() {
 #[ignore = "live network + real API keys"]
 fn train_alerts() {
     let c = Client::new();
-    report("train-alerts", &c, c.get_train_service_alerts(), |v| v.len());
+    report("train-alerts", &c, c.get_train_service_alerts(), |v| {
+        v.len()
+    });
 }
 
 #[test]

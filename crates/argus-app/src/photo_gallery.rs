@@ -40,7 +40,10 @@ impl PhotoGalleryState {
 
 /// Photos still usable after decode failures, in bundle order.
 pub fn usable<'a>(photos: &'a [PlacePhoto], state: &PhotoGalleryState) -> Vec<&'a PlacePhoto> {
-    photos.iter().filter(|p| !state.failed.contains(&p.thumb)).collect()
+    photos
+        .iter()
+        .filter(|p| !state.failed.contains(&p.thumb))
+        .collect()
 }
 
 /// Clamp the active thumbnail when one is removed (the TS app uses
@@ -104,13 +107,19 @@ mod tests {
             photo("b", PlacePhotoSource::Commons),
             photo("c", PlacePhotoSource::Commons),
         ];
-        let mut state = PhotoGalleryState::default();
-        state.active = 2;
+        let mut state = PhotoGalleryState {
+            active: 2,
+            ..Default::default()
+        };
         assert_eq!(active_index(&state, 3), 2);
         state.mark_failed(&photos[1].thumb);
         let usable = usable(&photos, &state);
         assert_eq!(usable.len(), 2);
-        assert_eq!(active_index(&state, usable.len()), 1, "clamped to last photo");
+        assert_eq!(
+            active_index(&state, usable.len()),
+            1,
+            "clamped to last photo"
+        );
         assert_eq!(usable[1].thumb, photos[2].thumb);
     }
 

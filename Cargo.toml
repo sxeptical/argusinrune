@@ -1,5 +1,4 @@
-# Argus — native desktop rewrite (Rune).
-# The Next.js/TypeScript tree is kept alongside this workspace during the rewrite.
+# Argus — native desktop dashboard (Rune). See docs/ARCHITECTURE.md.
 [workspace]
 resolver = "3"
 members = [
@@ -17,7 +16,7 @@ license = "MIT"
 # Rune uses vendored crates that it declares in its own `[patch.crates-io]`.
 # Cargo does NOT inherit a dependency's patches, so an app that builds Rune
 # has to repeat them. Keep all of these revs in sync with `rune` below.
-# See crates/rune/README.md -> "Depending on Rune" and RUST_REWRITE.md.
+# See crates/rune/README.md -> "Depending on Rune" and docs/ARCHITECTURE.md.
 [patch.crates-io]
 winit = { git = "https://github.com/anomalyco/rune", rev = "55ef5268f22038a95344b3e9d2b4a25ddba731b1" }
 parley_engine = { git = "https://github.com/anomalyco/rune", rev = "55ef5268f22038a95344b3e9d2b4a25ddba731b1" }

@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * Authoring-time data pipeline (not run in CI or deployment). Builds the
- * static community-club bundle (public/community-clubs.json) from the
+ * static community-club bundle (data/community-clubs.json) from the
  * People's Association "Community Club / PAssion WaVe Outlet" dataset
  * (data.gov.sg, Singapore Open Data Licence).
  *
@@ -39,7 +39,7 @@ const composeAddress = (props) => {
   return base ? `${base}${postcode ? `, Singapore ${postcode}` : ""}` : postcode ? `Singapore ${postcode}` : null;
 };
 
-const poll = await fetchJson(`https://api-open.data.gov.sg/v1/public/api/datasets/${CC_DATASET}/poll-download`);
+const poll = await fetchJson(`https://api-open.data.gov.sg/v1/data/api/datasets/${CC_DATASET}/poll-download`);
 const url = poll?.data?.url;
 if (!url) throw new Error(`No presigned URL returned for ${CC_DATASET}`);
 const data = await fetchJson(url, { headers: { "User-Agent": USER_AGENT } });
@@ -86,8 +86,8 @@ const { places: withPhotos, applied: pickedCount } = await applyPhotoPicks(
 const photoCount = withPhotos.filter((club) => club.photos.length).length;
 
 const serialized = JSON.stringify(withPhotos);
-await mkdir("public", { recursive: true });
-await writeFile("public/community-clubs.json", serialized);
+await mkdir("data", { recursive: true });
+await writeFile("data/community-clubs.json", serialized);
 console.log(
   `Community club bundle: ${clubs.length} outlets ` +
     `(${clubs.filter((club) => club.kind === "community-club").length} community clubs, ${clubs.filter((club) => club.kind === "passionwave").length} PAssion WaVe; ` +

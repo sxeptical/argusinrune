@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * Authoring-time data pipeline (not run in CI or deployment). Builds the
- * static supermarket bundle (public/supermarkets.json) from OpenStreetMap
+ * static supermarket bundle (data/supermarkets.json) from OpenStreetMap
  * `shop=supermarket` (ODbL): named, in Singapore bounds, not clearly
  * mistagged non-supermarkets. No photos.
  *
@@ -114,8 +114,8 @@ supermarkets.sort((a, b) => a.name.localeCompare(b.name, "en-SG"));
 if (supermarkets.length < 540) throw new Error(`Supermarket query returned only ${supermarkets.length} named stores`);
 
 const serialized = JSON.stringify(supermarkets);
-await mkdir("public", { recursive: true });
-await writeFile("public/supermarkets.json", serialized);
+await mkdir("data", { recursive: true });
+await writeFile("data/supermarkets.json", serialized);
 const byBrand = {};
 for (const s of supermarkets) byBrand[s.brand] = (byBrand[s.brand] ?? 0) + 1;
 console.log(

@@ -4,7 +4,7 @@
 
 use argus_core::types::*;
 
-use crate::live::{DataSnapshot, SourceState, SourceStatus, def, default_weather, FeedKind};
+use crate::live::{DataSnapshot, FeedKind, SourceState, SourceStatus, def, default_weather};
 
 fn ok_sources() -> Vec<SourceState> {
     crate::live::FEED_DEFS
@@ -32,21 +32,24 @@ pub fn demo_snapshot() -> DataSnapshot {
         image_link: String::new(),
         location: loc.into(),
     };
-    let flight = |id: &str, call: &str, lat: f64, lon: f64, dir: FlightDirection, alt: f64, vel: f64| FlightState {
-        id: id.into(),
-        icao24: format!("7{a}{b}", a = &id[0..1], b = &id[1..2]),
-        callsign: call.into(),
-        origin_country: "Singapore".into(),
-        latitude: lat,
-        longitude: lon,
-        altitude: Some(alt),
-        velocity: Some(vel),
-        track: Some(122.0),
-        vertical_rate: None,
-        on_ground: false,
-        direction: dir,
-        last_contact: None,
-    };
+    let flight =
+        |id: &str, call: &str, lat: f64, lon: f64, dir: FlightDirection, alt: f64, vel: f64| {
+            FlightState {
+                id: id.into(),
+                icao24: format!("7{a}{b}", a = &id[0..1], b = &id[1..2]),
+                callsign: call.into(),
+                origin_country: "Singapore".into(),
+                latitude: lat,
+                longitude: lon,
+                altitude: Some(alt),
+                velocity: Some(vel),
+                track: Some(122.0),
+                vertical_rate: None,
+                on_ground: false,
+                direction: dir,
+                last_contact: None,
+            }
+        };
     let mut weather = default_weather();
     weather.temperature = Some(30.2);
     weather.humidity = Some(78.0);
@@ -61,9 +64,27 @@ pub fn demo_snapshot() -> DataSnapshot {
 
     DataSnapshot {
         bus_stops: vec![
-            bus_stop("01012", "Bukit Merah Interchange", "Bukit Merah Central", 1.2786, 103.8242),
-            bus_stop("02031", "Bras Basah Complex", "Victoria St", 1.2939, 103.8536),
-            bus_stop("03111", "Tanah Merah Stn Exit A", "New Upper Changi Rd", 1.3277, 103.9456),
+            bus_stop(
+                "01012",
+                "Bukit Merah Interchange",
+                "Bukit Merah Central",
+                1.2786,
+                103.8242,
+            ),
+            bus_stop(
+                "02031",
+                "Bras Basah Complex",
+                "Victoria St",
+                1.2939,
+                103.8536,
+            ),
+            bus_stop(
+                "03111",
+                "Tanah Merah Stn Exit A",
+                "New Upper Changi Rd",
+                1.3277,
+                103.9456,
+            ),
         ],
         cameras: vec![
             camera("1701", "PIE / Changi South Ave 3", 1.3354, 103.9579),
@@ -73,29 +94,55 @@ pub fn demo_snapshot() -> DataSnapshot {
         ],
         carparks: vec![
             CarparkAvailability {
-                id: "P001".into(), name: "Bukit Merah Car Park".into(), area: "Bukit Merah".into(),
-                agency: "HDB".into(), lat: 1.2791, lng: 103.8248,
-                car_lots: Some(42), motorcycle_lots: Some(6), heavy_lots: None,
+                id: "P001".into(),
+                name: "Bukit Merah Car Park".into(),
+                area: "Bukit Merah".into(),
+                agency: "HDB".into(),
+                lat: 1.2791,
+                lng: 103.8248,
+                car_lots: Some(42),
+                motorcycle_lots: Some(6),
+                heavy_lots: None,
             },
             CarparkAvailability {
-                id: "P002".into(), name: "Raffles Place Car Park".into(), area: "Raffles Place".into(),
-                agency: "URA".into(), lat: 1.2845, lng: 103.8512,
-                car_lots: Some(9), motorcycle_lots: None, heavy_lots: None,
+                id: "P002".into(),
+                name: "Raffles Place Car Park".into(),
+                area: "Raffles Place".into(),
+                agency: "URA".into(),
+                lat: 1.2845,
+                lng: 103.8512,
+                car_lots: Some(9),
+                motorcycle_lots: None,
+                heavy_lots: None,
             },
         ],
         ev_chargers: vec![EvChargingLocation {
-            id: "EV01".into(), name: "VivoCity EV Hub".into(), address: "1 HarbourFront Walk".into(),
-            lat: 1.2644, lng: 103.8222, available: 3, occupied: 5, total: 8,
-            max_power_kw: Some(50.0), has_dc: true,
-            operators: vec!["Shell Recharge".into()], plug_types: vec!["CCS2".into()],
+            id: "EV01".into(),
+            name: "VivoCity EV Hub".into(),
+            address: "1 HarbourFront Walk".into(),
+            lat: 1.2644,
+            lng: 103.8222,
+            available: 3,
+            occupied: 5,
+            total: 8,
+            max_power_kw: Some(50.0),
+            has_dc: true,
+            operators: vec!["Shell Recharge".into()],
+            plug_types: vec!["CCS2".into()],
         }],
         incidents: vec![
             TrafficIncident {
-                id: "INC-401".into(), incident_type: "Accident".into(), lat: 1.3041, lng: 103.8791,
+                id: "INC-401".into(),
+                incident_type: "Accident".into(),
+                lat: 1.3041,
+                lng: 103.8791,
                 message: "Accident on PIE eastbound after Exit 22. Lane 2 blocked.".into(),
             },
             TrafficIncident {
-                id: "INC-402".into(), incident_type: "Heavy Traffic".into(), lat: 1.2701, lng: 103.8360,
+                id: "INC-402".into(),
+                incident_type: "Heavy Traffic".into(),
+                lat: 1.2701,
+                lng: 103.8360,
                 message: "Slow-moving traffic on Ayer Rajah Expressway towards CBD.".into(),
             },
         ],
@@ -108,23 +155,61 @@ pub fn demo_snapshot() -> DataSnapshot {
             end_time: None,
         }],
         flights: vec![
-            flight("41", "SQ402", 1.3701, 103.9102, FlightDirection::Inbound, 5400.0, 245.0),
-            flight("42", "SQ318", 1.3444, 103.9021, FlightDirection::Outbound, 7200.0, 260.0),
-            flight("43", "QF052", 1.2901, 103.8820, FlightDirection::Transit, 9800.0, 280.0),
-            flight("44", "TG414", 1.3140, 103.9400, FlightDirection::Inbound, 3900.0, 210.0),
+            flight(
+                "41",
+                "SQ402",
+                1.3701,
+                103.9102,
+                FlightDirection::Inbound,
+                5400.0,
+                245.0,
+            ),
+            flight(
+                "42",
+                "SQ318",
+                1.3444,
+                103.9021,
+                FlightDirection::Outbound,
+                7200.0,
+                260.0,
+            ),
+            flight(
+                "43",
+                "QF052",
+                1.2901,
+                103.8820,
+                FlightDirection::Transit,
+                9800.0,
+                280.0,
+            ),
+            flight(
+                "44",
+                "TG414",
+                1.3140,
+                103.9400,
+                FlightDirection::Inbound,
+                3900.0,
+                210.0,
+            ),
         ],
         news: vec![
             NewsItem {
-                title: "LTA expands bus service coverage in Tampines".into(), source: "Channel NewsAsia".into(),
-                url: "#".into(), published_at: "2026-11-17T08:10:00+08:00".into(),
+                title: "LTA expands bus service coverage in Tampines".into(),
+                source: "Channel NewsAsia".into(),
+                url: "#".into(),
+                published_at: "2026-11-17T08:10:00+08:00".into(),
             },
             NewsItem {
-                title: "Singapore records higher afternoon humidity".into(), source: "Today Online".into(),
-                url: "#".into(), published_at: "2026-11-17T07:35:00+08:00".into(),
+                title: "Singapore records higher afternoon humidity".into(),
+                source: "Today Online".into(),
+                url: "#".into(),
+                published_at: "2026-11-17T07:35:00+08:00".into(),
             },
             NewsItem {
-                title: "Changi Airport traffic recovers for seventh straight month".into(), source: "The Straits Times".into(),
-                url: "#".into(), published_at: "2026-11-17T06:50:00+08:00".into(),
+                title: "Changi Airport traffic recovers for seventh straight month".into(),
+                source: "The Straits Times".into(),
+                url: "#".into(),
+                published_at: "2026-11-17T06:50:00+08:00".into(),
             },
         ],
         bus_arrivals: vec![],

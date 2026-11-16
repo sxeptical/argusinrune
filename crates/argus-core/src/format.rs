@@ -21,9 +21,7 @@ pub fn parse_iso(input: &str) -> Option<IsoTimestamp> {
     if bytes.len() < 10 {
         return None;
     }
-    let num = |a: usize, b: usize| -> Option<i64> {
-        s.get(a..b)?.parse::<i64>().ok()
-    };
+    let num = |a: usize, b: usize| -> Option<i64> { s.get(a..b)?.parse::<i64>().ok() };
     let year = num(0, 4)?;
     let month = num(5, 7)?;
     let day = num(8, 10)?;
@@ -51,12 +49,12 @@ pub fn parse_iso(input: &str) -> Option<IsoTimestamp> {
             let sign = tail.as_bytes()[sign_pos];
             let off = &tail[sign_pos + 1..];
             let parts: Vec<&str> = off.split(':').collect();
-            if parts.len() == 2 {
-                if let (Ok(h), Ok(m)) = (parts[0].parse::<i64>(), parts[1].parse::<i64>()) {
-                    offset_minutes = h * 60 + m;
-                    if sign == b'-' {
-                        offset_minutes = -offset_minutes;
-                    }
+            if parts.len() == 2
+                && let (Ok(h), Ok(m)) = (parts[0].parse::<i64>(), parts[1].parse::<i64>())
+            {
+                offset_minutes = h * 60 + m;
+                if sign == b'-' {
+                    offset_minutes = -offset_minutes;
                 }
             }
         }
@@ -105,7 +103,9 @@ fn sg_civil(ts: &IsoTimestamp) -> (i64, i64, i64, i64, i64, i64) {
 
 /// `formatSgTime` — 12-hour time in en-SG style, e.g. `8:15:30 am`.
 pub fn format_sg_time(iso: &str) -> String {
-    let Some(ts) = parse_iso(iso) else { return String::new() };
+    let Some(ts) = parse_iso(iso) else {
+        return String::new();
+    };
     let (_, _, _, hour, minute, second) = sg_civil(&ts);
     let (h, period) = match hour {
         0 => (12, "am"),
@@ -118,7 +118,9 @@ pub fn format_sg_time(iso: &str) -> String {
 
 /// `formatSgDateTime` — e.g. `16 Nov 2026, 8:15 am` (en-SG date + time).
 pub fn format_sg_date_time(iso: &str) -> String {
-    let Some(ts) = parse_iso(iso) else { return String::new() };
+    let Some(ts) = parse_iso(iso) else {
+        return String::new();
+    };
     let (y, m, d, hour, minute, _) = sg_civil(&ts);
     let month = [
         "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
@@ -129,7 +131,15 @@ pub fn format_sg_date_time(iso: &str) -> String {
         12 => (12, "pm"),
         _ => (hour - 12, "pm"),
     };
-    format!("{} {} {}, {}:{:02} {}", d, month[(m - 1) as usize], y, h, minute, period)
+    format!(
+        "{} {} {}, {}:{:02} {}",
+        d,
+        month[(m - 1) as usize],
+        y,
+        h,
+        minute,
+        period
+    )
 }
 
 /// Today's calendar date in Singapore (YYYY-MM-DD).
@@ -140,7 +150,9 @@ pub fn singapore_today() -> String {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0);
-    singapore_date_for(IsoTimestamp { epoch_seconds: secs })
+    singapore_date_for(IsoTimestamp {
+        epoch_seconds: secs,
+    })
 }
 
 pub fn singapore_date_for(ts: IsoTimestamp) -> String {
@@ -168,16 +180,12 @@ pub fn group_thousands(value: i64) -> String {
     let digits = value.abs().to_string();
     let mut out = String::new();
     for (i, c) in digits.chars().enumerate() {
-        if i > 0 && (digits.len() - i) % 3 == 0 {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
             out.push(',');
         }
         out.push(c);
     }
-    if negative {
-        format!("-{}", out)
-    } else {
-        out
-    }
+    if negative { format!("-{}", out) } else { out }
 }
 
 #[cfg(test)]

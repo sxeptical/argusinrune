@@ -10,11 +10,31 @@ pub struct PsiBand {
 }
 
 pub const PSI_BANDS: &[PsiBand] = &[
-    PsiBand { status: PsiStatus::Good, range: "0–50", max: 50.0 },
-    PsiBand { status: PsiStatus::Moderate, range: "51–100", max: 100.0 },
-    PsiBand { status: PsiStatus::Unhealthy, range: "101–200", max: 200.0 },
-    PsiBand { status: PsiStatus::VeryUnhealthy, range: "201–300", max: 300.0 },
-    PsiBand { status: PsiStatus::Hazardous, range: "301+", max: f64::INFINITY },
+    PsiBand {
+        status: PsiStatus::Good,
+        range: "0–50",
+        max: 50.0,
+    },
+    PsiBand {
+        status: PsiStatus::Moderate,
+        range: "51–100",
+        max: 100.0,
+    },
+    PsiBand {
+        status: PsiStatus::Unhealthy,
+        range: "101–200",
+        max: 200.0,
+    },
+    PsiBand {
+        status: PsiStatus::VeryUnhealthy,
+        range: "201–300",
+        max: 300.0,
+    },
+    PsiBand {
+        status: PsiStatus::Hazardous,
+        range: "301+",
+        max: f64::INFINITY,
+    },
 ];
 
 pub struct Pm25BandInfo {
@@ -25,10 +45,30 @@ pub struct Pm25BandInfo {
 }
 
 pub const PM25_BANDS: &[Pm25BandInfo] = &[
-    Pm25BandInfo { band: Pm25Band::Normal, label: "I · Normal", range: "0–55", max: 55.0 },
-    Pm25BandInfo { band: Pm25Band::Elevated, label: "II · Elevated", range: "56–150", max: 150.0 },
-    Pm25BandInfo { band: Pm25Band::High, label: "III · High", range: "151–250", max: 250.0 },
-    Pm25BandInfo { band: Pm25Band::VeryHigh, label: "IV · Very High", range: "251+", max: f64::INFINITY },
+    Pm25BandInfo {
+        band: Pm25Band::Normal,
+        label: "I · Normal",
+        range: "0–55",
+        max: 55.0,
+    },
+    Pm25BandInfo {
+        band: Pm25Band::Elevated,
+        label: "II · Elevated",
+        range: "56–150",
+        max: 150.0,
+    },
+    Pm25BandInfo {
+        band: Pm25Band::High,
+        label: "III · High",
+        range: "151–250",
+        max: 250.0,
+    },
+    Pm25BandInfo {
+        band: Pm25Band::VeryHigh,
+        label: "IV · Very High",
+        range: "251+",
+        max: f64::INFINITY,
+    },
 ];
 
 pub fn get_psi_status(psi: Option<f64>) -> PsiStatus {
@@ -39,7 +79,7 @@ pub fn get_psi_status(psi: Option<f64>) -> PsiStatus {
     PSI_BANDS
         .iter()
         .find(|band| psi <= band.max)
-        .map(|band| band.status.clone())
+        .map(|band| band.status)
         .unwrap_or(PsiStatus::Hazardous)
 }
 
@@ -51,7 +91,7 @@ pub fn get_pm25_band(pm25: Option<f64>) -> Pm25Band {
     PM25_BANDS
         .iter()
         .find(|band| pm25 <= band.max)
-        .map(|band| band.band.clone())
+        .map(|band| band.band)
         .unwrap_or(Pm25Band::VeryHigh)
 }
 

@@ -59,7 +59,7 @@ impl Cache {
     }
 
     fn negative_ttl(error: &Error, override_ttl: Option<Duration>) -> Duration {
-        let ttl = override_ttl.unwrap_or_else(|| {
+        let ttl = override_ttl.unwrap_or({
             if matches!(error, Error::ExternalApi { status: 429, .. }) {
                 NEGATIVE_TTL_MAX
             } else {
@@ -111,17 +111,18 @@ impl Cache {
     {
         loop {
             let mut inner = self.inner.lock().unwrap();
-            if let Some(entry) = inner.entries.get(key) {
-                if entry.timestamp.elapsed() < entry.ttl.min(ttl) {
-                    return match &entry.state {
-                        Ok(value) => serde_json::from_value(value.clone())
-                            .map_err(|e| Error::SchemaParse {
-                                service: "cache".into(),
-                                message: format!("decode cached {key}: {e}"),
-                            }),
-                        Err(err) => Err(err.clone()),
-                    };
-                }
+            if let Some(entry) = inner.entries.get(key)
+                && entry.timestamp.elapsed() < entry.ttl.min(ttl)
+            {
+                return match &entry.state {
+                    Ok(value) => {
+                        serde_json::from_value(value.clone()).map_err(|e| Error::SchemaParse {
+                            service: "cache".into(),
+                            message: format!("decode cached {key}: {e}"),
+                        })
+                    }
+                    Err(err) => Err(err.clone()),
+                };
             }
             if inner.in_flight.contains(key) {
                 // Another worker is producing this key; wait for its answer.
@@ -163,12 +164,7 @@ impl Cache {
     }
 
     /// Store a value with an explicit TTL (open-ended when `None`).
-    pub fn set_with_ttl<T: Serialize>(
-        &self,
-        key: &str,
-        value: &T,
-        ttl: Option<Duration>,
-    ) {
+    pub fn set_with_ttl<T: Serialize>(&self, key: &str, value: &T, ttl: Option<Duration>) {
         let json = match serde_json::to_value(value) {
             Ok(v) => v,
             Err(_) => return,
@@ -196,7 +192,11 @@ impl Cache {
         if entry.state.is_err() || entry.timestamp.elapsed() >= max_age {
             return None;
         }
-        entry.state.as_ref().ok().and_then(|v| serde_json::from_value(v.clone()).ok())
+        entry
+            .state
+            .as_ref()
+            .ok()
+            .and_then(|v| serde_json::from_value(v.clone()).ok())
     }
 
     pub fn clear(&self, key: Option<&str>) {
@@ -271,13 +271,22 @@ mod tests {
     fn value_dependent_ttl_and_snapshot_peek() {
         let cache = Cache::new();
         cache.set("snapshot", &vec![1, 2, 3]);
-        assert_eq!(cache.peek::<Vec<i32>>("snapshot", Duration::from_secs(1)), Some(vec![1, 2, 3]));
+        assert_eq!(
+            cache.peek::<Vec<i32>>("snapshot", Duration::from_secs(1)),
+            Some(vec![1, 2, 3])
+        );
 
         let got = cache
             .get_with(
                 "weather",
                 Duration::from_millis(80),
-                |partial: &bool| if *partial { Duration::from_millis(30) } else { Duration::from_millis(80) },
+                |partial: &bool| {
+                    if *partial {
+                        Duration::from_millis(30)
+                    } else {
+                        Duration::from_millis(80)
+                    }
+                },
                 || Ok::<_, Error>(true),
             )
             .unwrap();

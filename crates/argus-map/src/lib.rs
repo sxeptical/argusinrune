@@ -46,12 +46,15 @@ pub mod state;
 pub mod tile;
 pub mod view;
 
-pub use camera::{DEFAULT_CENTER, DEFAULT_ZOOM, LatLngBounds, LngLat, MapCamera, MAX_ZOOM, MIN_ZOOM, SINGAPORE_BOUNDS};
-pub use overlay::{
-    ClusterOptions, DrawnPoint, Icon, MapPoint, OverlayId, Overlays, PointStyle, Polygon, Polyline, RadiusCircle, Rgba,
-    point_in_polygon, radius_circle_ring,
+pub use camera::{
+    DEFAULT_CENTER, DEFAULT_ZOOM, LatLngBounds, LngLat, MAX_ZOOM, MIN_ZOOM, MapCamera,
+    SINGAPORE_BOUNDS,
 };
-pub use projection::{TileCoord, TILE_SIZE, tile_zoom};
+pub use overlay::{
+    ClusterOptions, DrawnPoint, Icon, MapPoint, OverlayId, Overlays, PointStyle, Polygon, Polyline,
+    RadiusCircle, Rgba, point_in_polygon, radius_circle_ring,
+};
+pub use projection::{TILE_SIZE, TileCoord, tile_zoom};
 pub use state::{MapMsg, MapState};
 pub use tile::{ATTRIBUTION, CARTO_ATTRIBUTION, TileSource, TileStore, USER_AGENT, cache_dir};
 pub use view::{map_view, map_view_for};

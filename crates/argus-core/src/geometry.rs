@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::mrt_network::display_stations;
-use crate::mrt_routing::{is_routeable_mrt_station, MrtRouteSegment};
+use crate::mrt_routing::{MrtRouteSegment, is_routeable_mrt_station};
 use crate::types::{BusRouteStop, FlightState, LngLat, MrtGeoJson, TrafficCamera};
 
 // ---------------------------------------------------------------------------
@@ -78,10 +78,16 @@ pub struct PointGeo {
 }
 
 fn empty_line_geojson() -> BusRouteLineGeoJson {
-    BusRouteLineGeoJson { r#type: "FeatureCollection".into(), features: Vec::new() }
+    BusRouteLineGeoJson {
+        r#type: "FeatureCollection".into(),
+        features: Vec::new(),
+    }
 }
 fn empty_stops_geojson() -> BusRouteStopsGeoJson {
-    BusRouteStopsGeoJson { r#type: "FeatureCollection".into(), features: Vec::new() }
+    BusRouteStopsGeoJson {
+        r#type: "FeatureCollection".into(),
+        features: Vec::new(),
+    }
 }
 
 /// Resolve the full route, or only the selected stop's remaining segment.
@@ -105,26 +111,26 @@ pub fn resolve_bus_route_draw_path(overlay: &BusRouteOverlay) -> Vec<LngLat> {
         overlay.selected_stop_index
     };
     let at_terminus = overlay.selected_stop_index == Some(overlay.stops.len() as i64 - 1);
-    if !at_terminus {
-        if let Some(idx) = start_idx {
-            if idx >= 0 && (idx as usize) < full_coords.len() - 1 {
-                let stop = overlay
-                    .selected_stop_index
-                    .and_then(|i| overlay.stops.get(i as usize));
-                if overlay.path.len() < 2 || stop.is_none() {
-                    return full_coords[idx as usize..].to_vec();
-                }
-                let stop = stop.unwrap();
-                let start = closest_point_on_segment(
-                    [stop.longitude, stop.latitude],
-                    full_coords[idx as usize],
-                    full_coords[idx as usize + 1],
-                );
-                let mut result = vec![start];
-                result.extend_from_slice(&full_coords[(idx as usize) + 1..]);
-                return result;
-            }
+    if !at_terminus
+        && let Some(idx) = start_idx
+        && idx >= 0
+        && (idx as usize) < full_coords.len() - 1
+    {
+        let stop = overlay
+            .selected_stop_index
+            .and_then(|i| overlay.stops.get(i as usize));
+        if overlay.path.len() < 2 || stop.is_none() {
+            return full_coords[idx as usize..].to_vec();
         }
+        let stop = stop.unwrap();
+        let start = closest_point_on_segment(
+            [stop.longitude, stop.latitude],
+            full_coords[idx as usize],
+            full_coords[idx as usize + 1],
+        );
+        let mut result = vec![start];
+        result.extend_from_slice(&full_coords[(idx as usize) + 1..]);
+        return result;
     }
     full_coords
 }
@@ -149,11 +155,7 @@ pub fn resolve_remaining_route_stops(overlay: &BusRouteOverlay) -> Vec<BusRouteS
         return Vec::new();
     }
     let start = match overlay.selected_stop_index {
-        Some(idx)
-            if idx >= 0 && (idx as usize) < overlay.stops.len() - 1 =>
-        {
-            idx as usize
-        }
+        Some(idx) if idx >= 0 && (idx as usize) < overlay.stops.len() - 1 => idx as usize,
         _ => 0,
     };
     overlay.stops[start..].to_vec()
@@ -176,7 +178,10 @@ pub fn build_bus_route_geojson(overlay: Option<&BusRouteOverlay>) -> BusRouteLin
                 kind: "remaining".into(),
                 service_no: overlay.service_no.clone(),
             },
-            geometry: LineStringGeo { r#type: "LineString".into(), coordinates: draw },
+            geometry: LineStringGeo {
+                r#type: "LineString".into(),
+                coordinates: draw,
+            },
         }],
     }
 }
@@ -195,14 +200,17 @@ pub fn build_bus_route_stops_geojson(overlay: Option<&BusRouteOverlay>) -> BusRo
         .filter(|i| *i >= 0 && (*i as usize) < overlay.stops.len())
         .map(|i| i as usize);
     let at_terminus = selected == Some(overlay.stops.len() - 1);
-    let start_index = if selected.is_some() && !at_terminus { selected.unwrap() } else { 0 };
+    let start_index = match selected {
+        Some(index) if !at_terminus => index,
+        _ => 0,
+    };
     let last_idx = remaining.len() - 1;
     let mut features = Vec::new();
     for (index, stop) in remaining.iter().enumerate() {
         if !stop.latitude.is_finite() || !stop.longitude.is_finite() {
             continue;
         }
-        let is_selected = selected.is_some() && start_index + index == selected.unwrap();
+        let is_selected = selected == Some(start_index + index);
         let role = if is_selected {
             "selected"
         } else if index == last_idx {
@@ -224,7 +232,10 @@ pub fn build_bus_route_stops_geojson(overlay: Option<&BusRouteOverlay>) -> BusRo
             },
         });
     }
-    BusRouteStopsGeoJson { r#type: "FeatureCollection".into(), features }
+    BusRouteStopsGeoJson {
+        r#type: "FeatureCollection".into(),
+        features,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -267,7 +278,10 @@ pub fn interpolate_stations(
             color: color.into(),
             routeable: is_routeable_mrt_station(name),
         },
-        geometry: PointGeo { r#type: "Point".into(), coordinates: coord },
+        geometry: PointGeo {
+            r#type: "Point".into(),
+            coordinates: coord,
+        },
     };
     if coordinates.len() == station_names.len() {
         return station_names
@@ -407,10 +421,16 @@ pub fn build_route_geojson(
                 line: segment.line.clone(),
                 color: line_feature.properties.color.clone(),
             },
-            geometry: LineStringGeo { r#type: "LineString".into(), coordinates },
+            geometry: LineStringGeo {
+                r#type: "LineString".into(),
+                coordinates,
+            },
         });
     }
-    MrtRouteGeoJson { r#type: "FeatureCollection".into(), features }
+    MrtRouteGeoJson {
+        r#type: "FeatureCollection".into(),
+        features,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -457,7 +477,10 @@ where
             },
         })
         .collect();
-    PointFeatureCollection { r#type: "FeatureCollection".into(), features }
+    PointFeatureCollection {
+        r#type: "FeatureCollection".into(),
+        features,
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -489,7 +512,10 @@ where
             },
         })
         .collect();
-    PointFeatureCollection { r#type: "FeatureCollection".into(), features }
+    PointFeatureCollection {
+        r#type: "FeatureCollection".into(),
+        features,
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -518,7 +544,10 @@ where
             },
         })
         .collect();
-    PointFeatureCollection { r#type: "FeatureCollection".into(), features }
+    PointFeatureCollection {
+        r#type: "FeatureCollection".into(),
+        features,
+    }
 }
 
 /// Build MRT station features from the MRT line GeoJSON and display station
@@ -572,7 +601,11 @@ mod tests {
 
     #[test]
     fn resolve_bus_route_draw_path_remaining_and_terminus() {
-        let stops = vec![stop(1, 103.0, 1.0), stop(2, 103.1, 1.1), stop(3, 103.2, 1.2)];
+        let stops = vec![
+            stop(1, 103.0, 1.0),
+            stop(2, 103.1, 1.1),
+            stop(3, 103.2, 1.2),
+        ];
         let overlay = BusRouteOverlay {
             service_no: "12".into(),
             direction: 1,
@@ -586,10 +619,18 @@ mod tests {
             vec![[103.1, 1.1], [103.2, 1.2]]
         );
         // Terminus draws the whole route.
-        let overlay2 = BusRouteOverlay { selected_stop_index: Some(2), selected_path_index: Some(1), ..overlay.clone() };
+        let overlay2 = BusRouteOverlay {
+            selected_stop_index: Some(2),
+            selected_path_index: Some(1),
+            ..overlay.clone()
+        };
         assert_eq!(resolve_bus_route_draw_path(&overlay2).len(), 3);
         // Start at the stop's point on a long road segment, not the segment start.
-        let stops3 = vec![stop(1, 103.8, 1.3), stop(2, 103.809, 1.3002), stop(3, 103.82, 1.3)];
+        let stops3 = vec![
+            stop(1, 103.8, 1.3),
+            stop(2, 103.809, 1.3002),
+            stop(3, 103.82, 1.3),
+        ];
         let overlay3 = BusRouteOverlay {
             service_no: "67".into(),
             direction: 2,
@@ -605,7 +646,9 @@ mod tests {
 
     #[test]
     fn stops_roles_and_null_overlay() {
-        let stops: Vec<_> = (1..=4).map(|n| stop(n, 103.0 + n as f64 / 10.0, 1.0 + n as f64 / 10.0)).collect();
+        let stops: Vec<_> = (1..=4)
+            .map(|n| stop(n, 103.0 + n as f64 / 10.0, 1.0 + n as f64 / 10.0))
+            .collect();
         let overlay = |sel: Option<i64>| BusRouteOverlay {
             service_no: "12".into(),
             direction: 1,
@@ -632,11 +675,13 @@ mod tests {
     #[test]
     fn interpolate_stations_vertices_and_even() {
         let names: Vec<String> = ["A", "B"].iter().map(|s| s.to_string()).collect();
-        let features = interpolate_stations(&[[103.0, 1.0], [103.1, 1.1]], &names, "Test Line", "#fff");
+        let features =
+            interpolate_stations(&[[103.0, 1.0], [103.1, 1.1]], &names, "Test Line", "#fff");
         assert_eq!(features.len(), 2);
         assert_eq!(features[0].geometry.coordinates, [103.0, 1.0]);
         let names: Vec<String> = ["A", "B", "C"].iter().map(|s| s.to_string()).collect();
-        let features = interpolate_stations(&[[0.0, 0.0], [10.0, 0.0]], &names, "Test Line", "#fff");
+        let features =
+            interpolate_stations(&[[0.0, 0.0], [10.0, 0.0]], &names, "Test Line", "#fff");
         assert_eq!(features.len(), 3);
         assert!((features[1].geometry.coordinates[0] - 5.0).abs() < 1e-5);
     }
@@ -644,7 +689,10 @@ mod tests {
     #[test]
     fn route_station_keys_and_empty_route() {
         assert!(route_station_keys(&[]).is_empty());
-        let empty = MrtGeoJson { r#type: "FeatureCollection".into(), features: Vec::new() };
+        let empty = MrtGeoJson {
+            r#type: "FeatureCollection".into(),
+            features: Vec::new(),
+        };
         let route = build_route_geojson(&empty, &[], &std::collections::HashMap::new());
         assert!(route.features.is_empty());
     }
@@ -653,10 +701,17 @@ mod tests {
     fn map_feature_builders_reject_invalid_coords() {
         use crate::types::BusStop;
         let stop = BusStop {
-            bus_stop_code: "01012".into(), road_name: "Victoria St".into(),
-            description: "Bugis Stn".into(), latitude: 1.3, longitude: 103.85,
+            bus_stop_code: "01012".into(),
+            road_name: "Victoria St".into(),
+            description: "Bugis Stn".into(),
+            latitude: 1.3,
+            longitude: 103.85,
         };
-        let bad = BusStop { bus_stop_code: "bad".into(), latitude: f64::NAN, ..stop.clone() };
+        let bad = BusStop {
+            bus_stop_code: "bad".into(),
+            latitude: f64::NAN,
+            ..stop.clone()
+        };
         let result = build_bus_stop_geojson([&stop, &bad]);
         assert_eq!(result.features.len(), 1);
         assert_eq!(result.features[0].properties.bus_stop_code, "01012");

@@ -89,7 +89,9 @@ impl ImageStore {
     /// even when a handle for that URL exists. Returns true when a request was
     /// scheduled (the caller may want to wake for the answer).
     pub fn update(&mut self, now: f64, urls: &[String], fresh: &[String]) -> bool {
-        let Some(client) = self.client.clone() else { return false };
+        let Some(client) = self.client.clone() else {
+            return false;
+        };
         let mut needed: Vec<String> = Vec::new();
         let mut seen: HashSet<&str> = HashSet::new();
         for url in urls.iter().chain(fresh.iter()) {
@@ -100,7 +102,12 @@ impl ImageStore {
             if !is_fresh && (self.images.contains_key(url) || self.inflight.contains(url)) {
                 continue;
             }
-            if !is_fresh && self.failed.get(url).is_some_and(|at| now - *at < RETRY_COOLDOWN_S) {
+            if !is_fresh
+                && self
+                    .failed
+                    .get(url)
+                    .is_some_and(|at| now - *at < RETRY_COOLDOWN_S)
+            {
                 continue;
             }
             needed.push(url.clone());
@@ -125,8 +132,12 @@ impl ImageStore {
     /// Land fetched bytes: create a decode handle and drop the in-flight mark.
     /// Returns true only when visible state changed.
     pub fn poll(&mut self, now: f64) -> bool {
-        let Some(batch) = self.fetch.take() else { return false };
-        let Some(cache) = &self.cache else { return false };
+        let Some(batch) = self.fetch.take() else {
+            return false;
+        };
+        let Some(cache) = &self.cache else {
+            return false;
+        };
         let mut changed = false;
         for (url, bytes) in batch {
             self.inflight.remove(&url);
@@ -149,7 +160,9 @@ impl ImageStore {
     /// Deterministic snap path: fetch and decode before the single headless
     /// frame. Safe only in `setup` — it blocks the calling thread.
     pub fn preload_sync(&mut self, urls: &[String]) -> usize {
-        let Some(client) = self.client.clone() else { return 0 };
+        let Some(client) = self.client.clone() else {
+            return 0;
+        };
         let Some(cache) = &self.cache else { return 0 };
         let mut count = 0;
         for url in urls {
@@ -157,7 +170,9 @@ impl ImageStore {
                 count += 1;
                 continue;
             }
-            let Some(bytes) = client.get_image_bytes(url).ok() else { continue };
+            let Some(bytes) = client.get_image_bytes(url).ok() else {
+                continue;
+            };
             let image = cache.load(bytes);
             if image.wait().is_err() {
                 continue;
@@ -216,7 +231,7 @@ mod tests {
         let mut store = ImageStore::new();
         store.set_client(Arc::new(argus_data::Client::new()));
         let camera = "https://images.data.gov.sg/api/traffic-images/1701.jpg".to_string();
-        assert!(store.update(0.0, &[], &[camera.clone()]));
+        assert!(store.update(0.0, &[], std::slice::from_ref(&camera)));
         assert_eq!(store.inflight_count(), 1);
         // The same presigned URL is re-fetched on the next feed refresh.
         assert!(store.update(60.0, &[], &[camera]));
@@ -229,7 +244,7 @@ mod tests {
         store.set_client(Arc::new(argus_data::Client::new()));
         let u = url(9);
         store.failed.insert(u.clone(), 10.0);
-        assert!(!store.update(10.0 + RETRY_COOLDOWN_S - 1.0, &[u.clone()], &[]));
+        assert!(!store.update(10.0 + RETRY_COOLDOWN_S - 1.0, std::slice::from_ref(&u), &[]));
         assert!(store.update(10.0 + RETRY_COOLDOWN_S, &[u], &[]));
     }
 }

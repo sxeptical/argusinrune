@@ -38,11 +38,17 @@ where
 }
 
 fn ok(body: impl Into<Vec<u8>>) -> Result<HttpResponse> {
-    Ok(HttpResponse { status: 200, body: body.into() })
+    Ok(HttpResponse {
+        status: 200,
+        body: body.into(),
+    })
 }
 
 fn fail(status: u16) -> Result<HttpResponse> {
-    Ok(HttpResponse { status, body: vec![] })
+    Ok(HttpResponse {
+        status,
+        body: vec![],
+    })
 }
 
 fn config() -> ArgusConfig {
@@ -86,7 +92,9 @@ fn camera_404_is_an_empty_feed() {
 
 #[test]
 fn grouped_camera_payload_via_client() {
-    let body = include_str!("fixtures/lta_cameras_grouped.json").as_bytes().to_vec();
+    let body = include_str!("fixtures/lta_cameras_grouped.json")
+        .as_bytes()
+        .to_vec();
     let client = client(move |_| ok(body.clone()));
     let cameras = client.get_traffic_cameras().unwrap();
     assert_eq!(cameras.len(), 2);
@@ -99,10 +107,27 @@ fn train_alert_fixture_maps_codes_and_stations() {
         serde_json::from_str(include_str!("fixtures/lta_train_alerts.json")).unwrap();
     let alerts = normalize_train_service_alerts(&payload);
     assert_eq!(alerts.len(), 1);
-    assert_eq!(alerts[0].status, argus_core::types::TrainAlertStatus::Disrupted);
-    assert_eq!(alerts[0].message, "No train service between Buona Vista and Raffles Place");
-    assert_eq!(alerts[0].affected_lines, ["East West Line", "North East Line", "Punggol LRT East Loop", "XYZ"]);
-    assert_eq!(alerts[0].affected_stations, ["EW21", "EW22", "NE1", "NE7", "PE1", "XY1"]);
+    assert_eq!(
+        alerts[0].status,
+        argus_core::types::TrainAlertStatus::Disrupted
+    );
+    assert_eq!(
+        alerts[0].message,
+        "No train service between Buona Vista and Raffles Place"
+    );
+    assert_eq!(
+        alerts[0].affected_lines,
+        [
+            "East West Line",
+            "North East Line",
+            "Punggol LRT East Loop",
+            "XYZ"
+        ]
+    );
+    assert_eq!(
+        alerts[0].affected_stations,
+        ["EW21", "EW22", "NE1", "NE7", "PE1", "XY1"]
+    );
     assert_eq!(alerts[0].start_time.as_deref(), Some("2026-09-09T08:15:00"));
     assert_eq!(alerts[0].end_time, None);
 }
@@ -140,7 +165,9 @@ fn ev_batch_fixture_normalizes_and_links_are_checked() {
 
     let link = "https://dmprod-datasets.s3.ap-southeast-1.amazonaws.com/ev-batch/EVBatch.json";
     let batch = format!(r#"{{"value":[{{"Link":"{link}"}}]}}"#).into_bytes();
-    let file_body = include_str!("fixtures/lta_ev_batch.json").as_bytes().to_vec();
+    let file_body = include_str!("fixtures/lta_ev_batch.json")
+        .as_bytes()
+        .to_vec();
     let calls = Arc::new(std::sync::Mutex::new(Vec::<(String, Vec<String>)>::new()));
     let calls2 = Arc::clone(&calls);
     let client = client(move |req| {
@@ -158,8 +185,18 @@ fn ev_batch_fixture_normalizes_and_links_are_checked() {
     assert_eq!(locations.len(), 1);
     let calls = calls.lock().unwrap();
     assert_eq!(calls.len(), 2);
-    assert!(calls[0].1.iter().any(|h| h.eq_ignore_ascii_case("AccountKey")));
-    assert!(!calls[1].1.iter().any(|h| h.eq_ignore_ascii_case("AccountKey")));
+    assert!(
+        calls[0]
+            .1
+            .iter()
+            .any(|h| h.eq_ignore_ascii_case("AccountKey"))
+    );
+    assert!(
+        !calls[1]
+            .1
+            .iter()
+            .any(|h| h.eq_ignore_ascii_case("AccountKey"))
+    );
 }
 
 #[test]
@@ -167,7 +204,10 @@ fn untrusted_ev_batch_link_is_rejected() {
     let client = client(|_| ok(r#"{"value":[{"Link":"https://evil.example/EVBatch.json"}]}"#));
     let err = client.get_ev_charging_locations().unwrap_err();
     assert_eq!(err.status(), 502);
-    assert_eq!(client.source(Source::EvChargers).status, HealthStatus::Error);
+    assert_eq!(
+        client.source(Source::EvChargers).status,
+        HealthStatus::Error
+    );
 }
 
 #[test]
@@ -205,13 +245,13 @@ fn bus_stop_pagination_uses_skip_offsets() {
 
 #[test]
 fn weather_fixtures_report_worst_region() {
-    let psi = serde_json::from_str::<argus_core::api_types::DataGovPsiResponse>(
-        include_str!("fixtures/weather_psi.json"),
-    )
+    let psi = serde_json::from_str::<argus_core::api_types::DataGovPsiResponse>(include_str!(
+        "fixtures/weather_psi.json"
+    ))
     .unwrap();
-    let pm25 = serde_json::from_str::<argus_core::api_types::DataGovPm25Response>(
-        include_str!("fixtures/weather_pm25.json"),
-    )
+    let pm25 = serde_json::from_str::<argus_core::api_types::DataGovPm25Response>(include_str!(
+        "fixtures/weather_pm25.json"
+    ))
     .unwrap();
     let (data, partial) = assemble_weather(None, Some(&psi), None, None, None, Some(&pm25), None);
     assert!(partial);
@@ -232,8 +272,12 @@ fn weather_all_feeds_failing_is_an_error() {
 
 #[test]
 fn weather_partial_snapshot_via_client() {
-    let psi = include_str!("fixtures/weather_psi.json").as_bytes().to_vec();
-    let pm25 = include_str!("fixtures/weather_pm25.json").as_bytes().to_vec();
+    let psi = include_str!("fixtures/weather_psi.json")
+        .as_bytes()
+        .to_vec();
+    let pm25 = include_str!("fixtures/weather_pm25.json")
+        .as_bytes()
+        .to_vec();
     let client = client(move |req| {
         if req.url.contains("/psi") {
             ok(psi.clone())
@@ -255,26 +299,44 @@ fn weather_partial_snapshot_via_client() {
 fn aviationstack_fixture_normalizes_directions_and_speed() {
     let response: argus_core::api_types::AviationStackResponse =
         serde_json::from_str(include_str!("fixtures/aviationstack.json")).unwrap();
-    let flights: Vec<_> = response.data.unwrap().iter().filter_map(argus_data::flights::from_aviation_stack).collect();
+    let flights: Vec<_> = response
+        .data
+        .unwrap()
+        .iter()
+        .filter_map(argus_data::flights::from_aviation_stack)
+        .collect();
     assert_eq!(flights.len(), 2);
     assert_eq!(flights[0].icao24, "76C0A1");
-    assert_eq!(flights[0].direction, argus_core::types::FlightDirection::Inbound);
+    assert_eq!(
+        flights[0].direction,
+        argus_core::types::FlightDirection::Inbound
+    );
     assert!((flights[0].velocity.unwrap() - 800.0 / 3.6).abs() < 1e-6);
-    assert_eq!(flights[1].direction, argus_core::types::FlightDirection::Outbound);
+    assert_eq!(
+        flights[1].direction,
+        argus_core::types::FlightDirection::Outbound
+    );
 }
 
 #[test]
 fn opensky_fixture_filters_ground_aircraft() {
     let response: argus_core::api_types::OpenSkyResponse =
         serde_json::from_str(include_str!("fixtures/opensky.json")).unwrap();
-    let flights: Vec<_> = response.states.unwrap().iter().filter_map(argus_data::flights::from_open_sky).collect();
+    let flights: Vec<_> = response
+        .states
+        .unwrap()
+        .iter()
+        .filter_map(argus_data::flights::from_open_sky)
+        .collect();
     assert_eq!(flights.len(), 1);
     assert_eq!(flights[0].callsign, "SIA321");
 }
 
 #[test]
 fn flights_fallback_chain_and_last_good_snapshot() {
-    let avia = include_str!("fixtures/aviationstack.json").as_bytes().to_vec();
+    let avia = include_str!("fixtures/aviationstack.json")
+        .as_bytes()
+        .to_vec();
     let sky = include_str!("fixtures/opensky.json").as_bytes().to_vec();
     let serve_empty = Arc::new(AtomicUsize::new(0));
     let open_sky_calls = Arc::new(AtomicUsize::new(0));
@@ -321,14 +383,21 @@ fn missing_aviation_key_falls_back_without_error() {
     let client = Client::with_transport(
         ArgusConfig::new(None, None, None),
         Arc::new(FnTransport(move |req| {
-            if req.url.contains("opensky") { ok(sky.clone()) } else { fail(401) }
+            if req.url.contains("opensky") {
+                ok(sky.clone())
+            } else {
+                fail(401)
+            }
         })),
     );
     let flights = client.get_flights().unwrap();
     assert_eq!(flights.len(), 1);
     let health = client.source(Source::Flights);
     assert_eq!(health.status, HealthStatus::Ok);
-    assert_eq!(health.message.as_deref(), Some("AVIATIONSTACK_API_KEY not configured"));
+    assert_eq!(
+        health.message.as_deref(),
+        Some("AVIATIONSTACK_API_KEY not configured")
+    );
 }
 
 // ---------- news fixture ----------
@@ -348,9 +417,11 @@ fn rss_fixture_parses_and_filters() {
 #[test]
 fn feedback_submit_via_neon_http_endpoint() {
     use std::sync::Mutex;
-    let seen: Arc<Mutex<Vec<(String, Vec<u8>)>>> = Arc::new(Mutex::new(vec![]));
+    type SeenRequests = Arc<Mutex<Vec<(String, Vec<u8>)>>>;
+    let seen: SeenRequests = Arc::new(Mutex::new(vec![]));
     let seen2 = Arc::clone(&seen);
-    let database_url = "postgresql://user:pass@ep-test.ap-southeast-1.aws.neon.tech/argus?sslmode=require";
+    let database_url =
+        "postgresql://user:pass@ep-test.ap-southeast-1.aws.neon.tech/argus?sslmode=require";
     let client = Client::with_transport(
         ArgusConfig::new(None, None, Some(database_url.to_string())),
         Arc::new(FnTransport(move |req| {
@@ -360,7 +431,10 @@ fn feedback_submit_via_neon_http_endpoint() {
     );
     let submission = argus_data::FeedbackSubmission::validate(5, Some("Great".into())).unwrap();
     client.submit_feedback(submission).unwrap();
-    assert_eq!(seen.lock().unwrap()[0].0, "https://ep-test.ap-southeast-1.aws.neon.tech/sql");
+    assert_eq!(
+        seen.lock().unwrap()[0].0,
+        "https://ep-test.ap-southeast-1.aws.neon.tech/sql"
+    );
     assert_eq!(client.source(Source::Feedback).status, HealthStatus::Ok);
 
     let unconfigured = Client::with_transport(

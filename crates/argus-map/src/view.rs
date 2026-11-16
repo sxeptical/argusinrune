@@ -17,13 +17,33 @@ use rune::{Color, Cx, El, LineCap, Shape, canvas, el, text};
 
 use crate::camera::MapCamera;
 use crate::overlay::{DrawnPoint, Icon, Overlays, radius_circle_ring};
-use crate::projection::{TileCoord, TILE_SIZE};
+use crate::projection::{TILE_SIZE, TileCoord};
 use crate::state::MapState;
 
-const MAP_BG: Color = Color { r: 0.035, g: 0.048, b: 0.058, a: 1.0 };
-const LABEL_COLOR: Color = Color { r: 0.86, g: 0.92, b: 0.94, a: 1.0 };
-const LABEL_BG: Color = Color { r: 0.02, g: 0.03, b: 0.04, a: 0.72 };
-const SELECT_COLOR: Color = Color { r: 1.0, g: 0.85, b: 0.30, a: 1.0 };
+const MAP_BG: Color = Color {
+    r: 0.035,
+    g: 0.048,
+    b: 0.058,
+    a: 1.0,
+};
+const LABEL_COLOR: Color = Color {
+    r: 0.86,
+    g: 0.92,
+    b: 0.94,
+    a: 1.0,
+};
+const LABEL_BG: Color = Color {
+    r: 0.02,
+    g: 0.03,
+    b: 0.04,
+    a: 0.72,
+};
+const SELECT_COLOR: Color = Color {
+    r: 1.0,
+    g: 0.85,
+    b: 0.30,
+    a: 1.0,
+};
 
 /// For apps whose state is exactly `MapState`.
 pub fn map_view(state: &MapState, overlays: &Overlays, cx: &mut Cx<MapState>) -> El {
@@ -88,12 +108,16 @@ pub fn map_view_for<S: 'static>(
 
     // Overlay geometry (polygons, lines, circles, points) in one Shape.
     let shape = overlay_shape(state, overlays);
-    root = root.child(canvas(shape).key("argus-map/overlays").absolute(0.0, 0.0).size(vw, vh));
+    root = root.child(
+        canvas(shape)
+            .key("argus-map/overlays")
+            .absolute(0.0, 0.0)
+            .size(vw, vh),
+    );
 
     // Cluster count labels (text cannot live in a Shape).
     let drawn = overlays.drawn_points(&state.camera, state.cluster);
-    let mut label_i = 0;
-    for dp in drawn.iter().filter(|d| d.count > 1) {
+    for (label_i, dp) in drawn.iter().filter(|d| d.count > 1).enumerate() {
         root = root.child(
             text(format!("{}", dp.count))
                 .key(format!("argus-map/cluster/{label_i}"))
@@ -104,7 +128,6 @@ pub fn map_view_for<S: 'static>(
                 .radius(6.0)
                 .fill(LABEL_BG),
         );
-        label_i += 1;
     }
 
     // Attribution (CARTO / OSM terms) bottom-right.
@@ -133,14 +156,19 @@ fn tile_rect(camera: &MapCamera, t: &TileCoord) -> (f32, f32, f32) {
 /// nearest cached ancestor at the ancestor's full rect (geographically aligned);
 /// exact tiles are painted on top. This needs no image cropping in Rune.
 fn tile_layer(state: &MapState) -> El {
-    let out = el().key("argus-map/tiles").w_full().h_full().clip_rounded(0.0);
+    let out = el()
+        .key("argus-map/tiles")
+        .w_full()
+        .h_full()
+        .clip_rounded(0.0);
     draw_tiles(out, state)
 }
 
 /// Internal: consult the tile cache and append tile Els.
 fn draw_tiles(mut out: El, state: &MapState) -> El {
     let camera = &state.camera;
-    let cov = crate::projection::tile_coverage(camera.world_center(), camera.zoom, state.viewport, 1);
+    let cov =
+        crate::projection::tile_coverage(camera.world_center(), camera.zoom, state.viewport, 1);
     // Immutable snapshots: `TileStore::ready_image` / `ready_ancestor` do not
     // disturb the LRU order while the view reads them.
     let store = state.tile_store();
@@ -149,18 +177,17 @@ fn draw_tiles(mut out: El, state: &MapState) -> El {
     let mut covered: HashSet<TileCoord> = HashSet::new();
 
     for t in &cov.tiles {
-        if let Some(img) = store.ready_image(t) {
-            if img.is_ready() {
-                exact.push((*t, img.clone()));
-                continue;
-            }
+        if let Some(img) = store.ready_image(t)
+            && img.is_ready()
+        {
+            exact.push((*t, img.clone()));
+            continue;
         }
-        if let Some((anc, img)) = store.ready_ancestor(t) {
-            if img.is_ready() {
-                if covered.insert(anc) {
-                    fallback.push((anc, img.clone()));
-                }
-            }
+        if let Some((anc, img)) = store.ready_ancestor(t)
+            && img.is_ready()
+            && covered.insert(anc)
+        {
+            fallback.push((anc, img.clone()));
         }
     }
 
@@ -191,7 +218,11 @@ fn overlay_shape(state: &MapState, overlays: &Overlays) -> Shape {
     let mut s = Shape::new();
 
     for poly in &overlays.polygons {
-        let pts: Vec<[f32; 2]> = poly.points.iter().map(|p| camera.lnglat_to_screen(*p).into()).collect();
+        let pts: Vec<[f32; 2]> = poly
+            .points
+            .iter()
+            .map(|p| camera.lnglat_to_screen(*p).into())
+            .collect();
         s = s.fill(pts.clone(), poly.fill.to_rune());
         if let Some((color, width)) = poly.stroke {
             s = s.stroke_with(pts, true, width, LineCap::Round, color.to_rune());
@@ -199,13 +230,20 @@ fn overlay_shape(state: &MapState, overlays: &Overlays) -> Shape {
     }
 
     for line in &overlays.lines {
-        let pts: Vec<[f32; 2]> = line.points.iter().map(|p| camera.lnglat_to_screen(*p).into()).collect();
+        let pts: Vec<[f32; 2]> = line
+            .points
+            .iter()
+            .map(|p| camera.lnglat_to_screen(*p).into())
+            .collect();
         s = s.stroke(pts, line.width, line.color.to_rune());
     }
 
     for circle in &overlays.circles {
         let ring = radius_circle_ring(circle.center, circle.radius_m, 72);
-        let pts: Vec<[f32; 2]> = ring.iter().map(|p| camera.lnglat_to_screen(*p).into()).collect();
+        let pts: Vec<[f32; 2]> = ring
+            .iter()
+            .map(|p| camera.lnglat_to_screen(*p).into())
+            .collect();
         s = s.fill(pts.clone(), circle.fill.to_rune());
         s = s.stroke_with(pts, true, 1.5, LineCap::Round, circle.stroke.to_rune());
     }
@@ -222,7 +260,11 @@ fn overlay_shape(state: &MapState, overlays: &Overlays) -> Shape {
 fn push_point(mut s: Shape, dp: &DrawnPoint, selected: bool, hovered: bool) -> Shape {
     let (x, y) = dp.screen;
     let r = dp.style.radius;
-    let fill = if selected { SELECT_COLOR } else { dp.style.color.to_rune() };
+    let fill = if selected {
+        SELECT_COLOR
+    } else {
+        dp.style.color.to_rune()
+    };
     match dp.style.icon {
         Icon::Circle => {
             let ring: Vec<[f32; 2]> = circle_pts(x, y, r, 16);
@@ -232,7 +274,12 @@ fn push_point(mut s: Shape, dp: &DrawnPoint, selected: bool, hovered: bool) -> S
             }
         }
         Icon::Square => {
-            let pts = vec![[x - r, y - r], [x + r, y - r], [x + r, y + r], [x - r, y + r]];
+            let pts = vec![
+                [x - r, y - r],
+                [x + r, y - r],
+                [x + r, y + r],
+                [x - r, y + r],
+            ];
             s = s.fill(pts, fill);
         }
         Icon::Diamond => {
@@ -250,7 +297,13 @@ fn push_point(mut s: Shape, dp: &DrawnPoint, selected: bool, hovered: bool) -> S
         }
     }
     if selected || hovered {
-        s = s.stroke_with(circle_pts(x, y, r + 3.0, 20), true, 1.5, LineCap::Round, SELECT_COLOR);
+        s = s.stroke_with(
+            circle_pts(x, y, r + 3.0, 20),
+            true,
+            1.5,
+            LineCap::Round,
+            SELECT_COLOR,
+        );
     }
     s
 }

@@ -15,10 +15,10 @@ mod hover;
 mod images;
 mod live;
 mod mall_directory;
-mod photo_gallery;
 mod msg;
 mod overlays;
 mod panels;
+mod photo_gallery;
 mod search;
 mod state;
 mod theme;
@@ -36,25 +36,49 @@ fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         return panels::dialogs::loading_screen(s);
     }
 
-    let bottom = row().key("bottom-panels").h(246.0).w_full().min_h(0.0).gap(8.0)
+    let bottom = row()
+        .key("bottom-panels")
+        .h(246.0)
+        .w_full()
+        .min_h(0.0)
+        .gap(8.0)
         .child(panels::transit::mrt_panel(s, cx).grow(1.0).min_w(0.0))
         .child(panels::transit::bus_panel(s, cx).grow(1.0).min_w(0.0))
         .child(panels::feeds::news_panel(s, cx).grow(1.0).min_w(0.0))
         .child(panels::feeds::cameras_panel(s, cx).grow(1.0).min_w(0.0));
 
-    let center = col().key("center").grow(1.0).min_w(0.0).min_h(0.0)
+    let center = col()
+        .key("center")
+        .grow(1.0)
+        .min_w(0.0)
+        .min_h(0.0)
         .child(panels::map::view(s, cx))
         .child(bottom);
 
-    let right = col().key("right").w(296.0).min_w(260.0).min_h(0.0).gap(8.0)
+    let right = col()
+        .key("right")
+        .w(296.0)
+        .min_w(260.0)
+        .min_h(0.0)
+        .gap(8.0)
         .child(panels::intel::intel_panel(s, cx).grow(1.0).min_h(0.0))
         .child(panels::intel::source_health(s, cx).h(232.0).min_h(0.0))
         .child(panels::intel::radius_panel(s, cx).h(196.0).min_h(0.0));
 
-    let mut root = col().key("root").w_full().h_full().fill(theme::PAPER)
+    let mut root = col()
+        .key("root")
+        .w_full()
+        .h_full()
+        .fill(theme::PAPER)
         .child(panels::header::view(s, cx))
         .child(
-            row().key("body").grow(1.0).min_h(0.0).w_full().padding(8.0).gap(8.0)
+            row()
+                .key("body")
+                .grow(1.0)
+                .min_h(0.0)
+                .w_full()
+                .padding(8.0)
+                .gap(8.0)
                 .child(panels::sidebar::layers_sidebar(s, cx))
                 .child(center)
                 .child(right),
@@ -124,7 +148,9 @@ fn poll(s: &mut AppState, now: f64, tx: &mut Tx) -> bool {
     for msg in s.map.drain_messages() {
         match msg {
             argus_map::MapMsg::OverlayClicked(id) => dispatch(s, Msg::MapClick(id)),
-            argus_map::MapMsg::GeoFilterPicked(point) => dispatch(s, Msg::MapPickGeo([point.lon, point.lat])),
+            argus_map::MapMsg::GeoFilterPicked(point) => {
+                dispatch(s, Msg::MapPickGeo([point.lon, point.lat]))
+            }
             argus_map::MapMsg::CameraChanged { .. } => {}
         }
         changed = true;
@@ -179,7 +205,9 @@ fn main() {
             ("live", state::scene_live),
             ("cameras", state::scene_cameras),
             ("camera-dialog", state::scene_camera_dialog),
-            ("loading", |s| { s.collapsed_groups.insert("boot/loading".into()); }),
+            ("loading", |s| {
+                s.collapsed_groups.insert("boot/loading".into());
+            }),
         ],
         setup: Some(setup),
         poll: Some(poll),

@@ -7,9 +7,7 @@ use argus_core::types::{AmenityType, LngLat};
 use argus_map::OverlayId;
 
 use crate::live::FeedKind;
-use crate::state::{
-    AirWindow, AppState, MrtPickTarget, Selection, Target,
-};
+use crate::state::{AirWindow, AppState, MrtPickTarget, Selection, Target};
 use crate::theme;
 
 #[allow(dead_code)]
@@ -19,8 +17,14 @@ pub enum Msg {
     ToggleGroupCollapse(String),
     ToggleGroupVisibility(Vec<String>),
     ToggleSubFilter(String),
-    ToggleSubOption { kind: AmenityType, value: String },
-    SetAllSubOptions { kind: AmenityType, all: bool },
+    ToggleSubOption {
+        kind: AmenityType,
+        value: String,
+    },
+    SetAllSubOptions {
+        kind: AmenityType,
+        all: bool,
+    },
     SetGeoPicking(bool),
     SetGeoRadius(f64),
     ClearGeo,
@@ -77,7 +81,9 @@ pub fn dispatch(s: &mut AppState, msg: Msg) {
             s.prefs_dirty = true;
         }
         Msg::ToggleGroupVisibility(keys) => {
-            let any_on = keys.iter().any(|k| s.visibility.get(k).copied().unwrap_or(false));
+            let any_on = keys
+                .iter()
+                .any(|k| s.visibility.get(k).copied().unwrap_or(false));
             for key in keys {
                 s.visibility.insert(key, !any_on);
             }
@@ -108,7 +114,11 @@ pub fn dispatch(s: &mut AppState, msg: Msg) {
                     .as_ref()
                     .map(|f| f.options.clone())
                     .unwrap_or_default();
-                let selection = if all { all_layer_options_on(&values) } else { Default::default() };
+                let selection = if all {
+                    all_layer_options_on(&values)
+                } else {
+                    Default::default()
+                };
                 s.amenity_filters.insert(kind, selection);
                 s.prefs_dirty = true;
             }
@@ -148,7 +158,11 @@ pub fn dispatch(s: &mut AppState, msg: Msg) {
         }
         Msg::SetRouteTarget(target) => s.route.target = target,
         Msg::ToggleRoutePicker(target) => {
-            s.route_picker = if s.route_picker == Some(target) { None } else { Some(target) };
+            s.route_picker = if s.route_picker == Some(target) {
+                None
+            } else {
+                Some(target)
+            };
             s.station_query = rune::TextEdit::new("");
         }
         Msg::PickMrtStation(station) => {
@@ -177,10 +191,8 @@ pub fn dispatch(s: &mut AppState, msg: Msg) {
         }
         Msg::SelectSearchResult(id) => {
             if let Some(result) = s.search_results.iter().find(|r| r.id == id).cloned() {
-                s.map.fly_to(
-                    argus_map::LngLat::new(result.lng, result.lat),
-                    result.zoom,
-                );
+                s.map
+                    .fly_to(argus_map::LngLat::new(result.lng, result.lat), result.zoom);
                 s.search_open = false;
                 if let Some(sel) = crate::search::selection_for(&result) {
                     reveal_selection(s, &sel);
@@ -243,11 +255,9 @@ pub fn dispatch(s: &mut AppState, msg: Msg) {
         }
         Msg::SetBusDirection(dir) => s.bus_route.direction = Some(dir),
         Msg::ShowBusRoute(shown) => {
-            if shown {
-                if let Some(service) = s.bus_route.selected_service.clone() {
-                    let stop = s.selected_stop.clone();
-                    s.data.request_bus_route(service, stop);
-                }
+            if shown && let Some(service) = s.bus_route.selected_service.clone() {
+                let stop = s.selected_stop.clone();
+                s.data.request_bus_route(service, stop);
             }
             s.bus_route.shown = shown;
         }
@@ -261,7 +271,14 @@ pub fn dispatch(s: &mut AppState, msg: Msg) {
         Msg::SendFeedback => {
             let rating = s.feedback.category as i32 + 3; // 3..5, valid for FeedbackSubmission
             let message = s.feedback.message.text.clone();
-            s.data.request_feedback(rating, if message.trim().is_empty() { None } else { Some(message) });
+            s.data.request_feedback(
+                rating,
+                if message.trim().is_empty() {
+                    None
+                } else {
+                    Some(message)
+                },
+            );
             s.feedback.sent = true;
         }
         Msg::TogglePanelCollapsed(key) => {
@@ -336,16 +353,16 @@ pub fn reveal_selection(s: &mut AppState, selection: &Selection) {
         Selection::Amenity { kind, id } => (Some(*kind), Some(id.clone())),
         _ => (None, None),
     };
-    if let (Some(kind), Some(id)) = (kind, id) {
-        if let Some(layer) = s.registry.as_ref().and_then(|r| r.layer(kind)) {
-            s.visibility.insert(layer.layer_key.clone(), true);
-            if let Some(place) = layer.by_id.get(&id).and_then(|i| layer.places.get(*i)) {
-                if let Some(option) = place.filter_option() {
-                    let entry = s.amenity_filters.entry(kind).or_default();
-                    if entry.get(&option).copied() == Some(false) {
-                        entry.insert(option, true);
-                    }
-                }
+    if let (Some(kind), Some(id)) = (kind, id)
+        && let Some(layer) = s.registry.as_ref().and_then(|r| r.layer(kind))
+    {
+        s.visibility.insert(layer.layer_key.clone(), true);
+        if let Some(place) = layer.by_id.get(&id).and_then(|i| layer.places.get(*i))
+            && let Some(option) = place.filter_option()
+        {
+            let entry = s.amenity_filters.entry(kind).or_default();
+            if entry.get(&option).copied() == Some(false) {
+                entry.insert(option, true);
             }
         }
     }
@@ -367,7 +384,12 @@ pub fn subfilter_summary(s: &AppState, kind: AmenityType) -> String {
     let on: Vec<&str> = filter
         .choices
         .iter()
-        .filter(|c| selected.and_then(|m| m.get(&c.value)).copied().unwrap_or(true))
+        .filter(|c| {
+            selected
+                .and_then(|m| m.get(&c.value))
+                .copied()
+                .unwrap_or(true)
+        })
         .map(|c| c.label.as_str())
         .collect();
     if on.len() == filter.choices.len() {
@@ -382,7 +404,11 @@ pub fn subfilter_summary(s: &AppState, kind: AmenityType) -> String {
 /// Source-health row label with the configured poll interval.
 #[allow(dead_code)]
 pub fn source_line(s: &AppState, kind: crate::live::FeedKind) -> String {
-    format!("{} · {}", s.source_status(kind).label(), s.feed_interval(kind))
+    format!(
+        "{} · {}",
+        s.source_status(kind).label(),
+        s.feed_interval(kind)
+    )
 }
 
 /// Colour used for a semantic category in the intel panel.

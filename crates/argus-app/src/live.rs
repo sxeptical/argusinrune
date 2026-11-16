@@ -15,8 +15,8 @@
 use std::sync::Arc;
 
 use argus_core::preferences::{
-    parse_geo_filter_center, parse_geo_filter_radius, parse_mrt_station,
-    parse_notification_prefs, parse_sensor_visibility,
+    parse_geo_filter_center, parse_geo_filter_radius, parse_mrt_station, parse_notification_prefs,
+    parse_sensor_visibility,
 };
 use argus_core::signals::NotificationPrefs;
 use argus_core::types::{
@@ -74,7 +74,14 @@ pub enum SourceStatus {
 
 impl SourceStatus {
     pub fn is_settled(&self) -> bool {
-        matches!(self, SourceStatus::Ok | SourceStatus::Stale | SourceStatus::Error(_) | SourceStatus::Unconfigured | SourceStatus::Disabled)
+        matches!(
+            self,
+            SourceStatus::Ok
+                | SourceStatus::Stale
+                | SourceStatus::Error(_)
+                | SourceStatus::Unconfigured
+                | SourceStatus::Disabled
+        )
     }
     pub fn is_ok(&self) -> bool {
         matches!(self, SourceStatus::Ok)
@@ -139,7 +146,11 @@ impl Default for DataSnapshot {
     fn default() -> Self {
         let sources = FEED_DEFS
             .iter()
-            .map(|d| SourceState { key: d.kind, label: d.label, status: SourceStatus::Unconfigured })
+            .map(|d| SourceState {
+                key: d.kind,
+                label: d.label,
+                status: SourceStatus::Unconfigured,
+            })
             .collect();
         Self {
             bus_stops: Vec::new(),
@@ -174,20 +185,73 @@ pub struct FeedDef {
 /// Intervals are copied verbatim from `use-dashboard-sources.ts`; keep in sync
 /// if the original dashboard's polling changes.
 pub const FEED_DEFS: &[FeedDef] = &[
-    FeedDef { kind: FeedKind::BusStops, label: "LTA Bus Network", interval_s: 1800.0, on_demand: false },
-    FeedDef { kind: FeedKind::Cameras, label: "Traffic Cameras", interval_s: 60.0, on_demand: false },
-    FeedDef { kind: FeedKind::Incidents, label: "Road Incidents", interval_s: 60.0, on_demand: false },
-    FeedDef { kind: FeedKind::Carparks, label: "Carpark Availability", interval_s: 60.0, on_demand: true },
-    FeedDef { kind: FeedKind::EvChargers, label: "EV Charging Points", interval_s: 300.0, on_demand: true },
-    FeedDef { kind: FeedKind::Weather, label: "Weather Grid", interval_s: 300.0, on_demand: false },
-    FeedDef { kind: FeedKind::News, label: "OSINT Stream", interval_s: 900.0, on_demand: false },
-    FeedDef { kind: FeedKind::Flights, label: "Airspace Feed", interval_s: 15.0, on_demand: false },
-    FeedDef { kind: FeedKind::TrainAlerts, label: "Train Service Alerts", interval_s: 60.0, on_demand: false },
-    FeedDef { kind: FeedKind::BusArrivals, label: "Bus Arrivals", interval_s: 15.0, on_demand: true },
+    FeedDef {
+        kind: FeedKind::BusStops,
+        label: "LTA Bus Network",
+        interval_s: 1800.0,
+        on_demand: false,
+    },
+    FeedDef {
+        kind: FeedKind::Cameras,
+        label: "Traffic Cameras",
+        interval_s: 60.0,
+        on_demand: false,
+    },
+    FeedDef {
+        kind: FeedKind::Incidents,
+        label: "Road Incidents",
+        interval_s: 60.0,
+        on_demand: false,
+    },
+    FeedDef {
+        kind: FeedKind::Carparks,
+        label: "Carpark Availability",
+        interval_s: 60.0,
+        on_demand: true,
+    },
+    FeedDef {
+        kind: FeedKind::EvChargers,
+        label: "EV Charging Points",
+        interval_s: 300.0,
+        on_demand: true,
+    },
+    FeedDef {
+        kind: FeedKind::Weather,
+        label: "Weather Grid",
+        interval_s: 300.0,
+        on_demand: false,
+    },
+    FeedDef {
+        kind: FeedKind::News,
+        label: "OSINT Stream",
+        interval_s: 900.0,
+        on_demand: false,
+    },
+    FeedDef {
+        kind: FeedKind::Flights,
+        label: "Airspace Feed",
+        interval_s: 15.0,
+        on_demand: false,
+    },
+    FeedDef {
+        kind: FeedKind::TrainAlerts,
+        label: "Train Service Alerts",
+        interval_s: 60.0,
+        on_demand: false,
+    },
+    FeedDef {
+        kind: FeedKind::BusArrivals,
+        label: "Bus Arrivals",
+        interval_s: 15.0,
+        on_demand: true,
+    },
 ];
 
 pub fn def(kind: FeedKind) -> &'static FeedDef {
-    FEED_DEFS.iter().find(|d| d.kind == kind).expect("feed definition")
+    FEED_DEFS
+        .iter()
+        .find(|d| d.kind == kind)
+        .expect("feed definition")
 }
 
 type Fetch<T> = Arc<dyn Fn() -> Result<T, String> + Send + Sync + 'static>;
@@ -204,7 +268,13 @@ struct Feed<T: Send + 'static> {
 
 impl<T: Send + Clone + 'static> Feed<T> {
     fn new(def: &'static FeedDef, commit: fn(&mut DataSnapshot, T)) -> Self {
-        Self { def, latest: Latest::default(), fetch: None, due: 0.0, commit }
+        Self {
+            def,
+            latest: Latest::default(),
+            fetch: None,
+            due: 0.0,
+            commit,
+        }
     }
 
     fn setup(&self, waker: Waker) {
@@ -231,7 +301,13 @@ impl<T: Send + Clone + 'static> Feed<T> {
 
     /// Land a new answer, start the next interval, and wake for it.
     /// Returns true only when visible snapshot state changed.
-    fn poll(&mut self, now: f64, tx: &mut Tx, snap: &mut DataSnapshot, on_demand: &OnDemand) -> bool {
+    fn poll(
+        &mut self,
+        now: f64,
+        tx: &mut Tx,
+        snap: &mut DataSnapshot,
+        on_demand: &OnDemand,
+    ) -> bool {
         let mut changed = false;
         if let Some(reply) = self.latest.take() {
             match reply {
@@ -277,9 +353,8 @@ pub struct OnDemand {
 }
 
 type ArrivalsFetch = Arc<dyn Fn(&str) -> Result<Vec<BusArrival>, String> + Send + Sync + 'static>;
-type RouteFetch = Arc<
-    dyn Fn(&str, Option<&str>) -> Result<BusRouteResponse, String> + Send + Sync + 'static,
->;
+type RouteFetch =
+    Arc<dyn Fn(&str, Option<&str>) -> Result<BusRouteResponse, String> + Send + Sync + 'static>;
 
 /// Panels talk to this boundary, never to `argus-data` directly, so a live
 /// implementation can be swapped in without touching any panel.
@@ -340,7 +415,9 @@ impl Default for LiveDataSource {
 
 impl std::fmt::Debug for LiveDataSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("LiveDataSource").field("sources", &self.snap.sources).finish()
+        f.debug_struct("LiveDataSource")
+            .field("sources", &self.snap.sources)
+            .finish()
     }
 }
 
@@ -408,7 +485,9 @@ impl LiveDataSource {
 
     /// Source health comes from argus-data's registry, not from our own guesses.
     fn sync_health(&mut self) -> bool {
-        let Some(client) = self.client.as_ref() else { return false };
+        let Some(client) = self.client.as_ref() else {
+            return false;
+        };
         let health = client.source_health();
         let mut changed = false;
         for row in &mut self.snap.sources {
@@ -418,15 +497,19 @@ impl LiveDataSource {
             {
                 SourceStatus::Disabled
             } else {
-                health.iter().find(|h| h.source.key() == kind.key()).and_then(|h| {
-                    Some(match h.status {
+                health
+                    .iter()
+                    .find(|h| h.source.key() == kind.key())
+                    .map(|h| match h.status {
                         HealthStatus::Ok => SourceStatus::Ok,
                         HealthStatus::Stale => SourceStatus::Stale,
-                        HealthStatus::Error => SourceStatus::Error(h.message.clone().unwrap_or_default()),
+                        HealthStatus::Error => {
+                            SourceStatus::Error(h.message.clone().unwrap_or_default())
+                        }
                         HealthStatus::Unconfigured => SourceStatus::Unconfigured,
                         HealthStatus::Loading => SourceStatus::Loading,
                     })
-                }).unwrap_or_else(|| row.status.clone())
+                    .unwrap_or_else(|| row.status.clone())
             };
             if new_status != row.status {
                 row.status = new_status;
@@ -437,7 +520,9 @@ impl LiveDataSource {
     }
 
     fn poll_route(&mut self) -> bool {
-        let Some(reply) = self.route.take() else { return false };
+        let Some(reply) = self.route.take() else {
+            return false;
+        };
         match reply {
             Ok(route) => {
                 self.snap.bus_routes = Some(route);
@@ -451,7 +536,9 @@ impl LiveDataSource {
     }
 
     fn poll_feedback(&mut self) -> bool {
-        let Some(reply) = self.feedback.take() else { return false };
+        let Some(reply) = self.feedback.take() else {
+            return false;
+        };
         match reply {
             Ok(()) => self.snap.feedback_status = Some("Thanks — report submitted.".into()),
             Err(message) => self.snap.feedback_status = Some(message),
@@ -470,12 +557,18 @@ impl LiveDataSource {
     }
 
     fn poll_arrivals(&mut self, now: f64, tx: &mut Tx) -> bool {
-        let Some(fetch) = self.arrivals_fetch.clone() else { return false };
-        let Some(stop) = self.arrivals_stop.clone() else { return false };
+        let Some(fetch) = self.arrivals_fetch.clone() else {
+            return false;
+        };
+        let Some(stop) = self.arrivals_stop.clone() else {
+            return false;
+        };
         let mut changed = false;
         if let Some(reply) = self.arrivals.take() {
             match reply {
-                Ok((code, arrivals)) if code == self.arrivals_stop.as_deref().unwrap_or_default() => {
+                Ok((code, arrivals))
+                    if code == self.arrivals_stop.as_deref().unwrap_or_default() =>
+                {
                     self.snap.bus_arrivals = arrivals;
                     self.set_arrivals_status(SourceStatus::Ok);
                     changed = true;
@@ -490,7 +583,9 @@ impl LiveDataSource {
         if now >= self.arrivals_due {
             self.set_arrivals_status(SourceStatus::Loading);
             let latest = &self.arrivals;
-            latest.request(stop.clone(), move |code| fetch(&code).map(|rows| (code, rows)));
+            latest.request(stop.clone(), move |code| {
+                fetch(&code).map(|rows| (code, rows))
+            });
             self.arrivals_due = now + def(FeedKind::BusArrivals).interval_s;
             tx.wake_at(self.arrivals_due);
         }
@@ -498,7 +593,12 @@ impl LiveDataSource {
     }
 
     fn set_arrivals_status(&mut self, status: SourceStatus) {
-        if let Some(s) = self.snap.sources.iter_mut().find(|s| s.key == FeedKind::BusArrivals) {
+        if let Some(s) = self
+            .snap
+            .sources
+            .iter_mut()
+            .find(|s| s.key == FeedKind::BusArrivals)
+        {
             s.status = status;
         }
     }
@@ -522,15 +622,23 @@ impl DataSource for LiveDataSource {
 
     fn poll(&mut self, now: f64, tx: &mut Tx) -> bool {
         let mut changed = false;
-        changed |= self.bus_stops.poll(now, tx, &mut self.snap, &self.on_demand);
+        changed |= self
+            .bus_stops
+            .poll(now, tx, &mut self.snap, &self.on_demand);
         changed |= self.cameras.poll(now, tx, &mut self.snap, &self.on_demand);
-        changed |= self.incidents.poll(now, tx, &mut self.snap, &self.on_demand);
+        changed |= self
+            .incidents
+            .poll(now, tx, &mut self.snap, &self.on_demand);
         changed |= self.carparks.poll(now, tx, &mut self.snap, &self.on_demand);
-        changed |= self.ev_chargers.poll(now, tx, &mut self.snap, &self.on_demand);
+        changed |= self
+            .ev_chargers
+            .poll(now, tx, &mut self.snap, &self.on_demand);
         changed |= self.weather.poll(now, tx, &mut self.snap, &self.on_demand);
         changed |= self.news.poll(now, tx, &mut self.snap, &self.on_demand);
         changed |= self.flights.poll(now, tx, &mut self.snap, &self.on_demand);
-        changed |= self.train_alerts.poll(now, tx, &mut self.snap, &self.on_demand);
+        changed |= self
+            .train_alerts
+            .poll(now, tx, &mut self.snap, &self.on_demand);
         changed |= self.poll_arrivals(now, tx);
         changed |= self.poll_route();
         changed |= self.poll_feedback();
@@ -584,7 +692,9 @@ impl DataSource for LiveDataSource {
         self.snap.bus_routes = None;
         if let Some(fetch) = self.route_fetch.clone() {
             let latest = &self.route;
-            latest.request(key.clone(), move |(service, stop)| fetch(&service, stop.as_deref()));
+            latest.request(key.clone(), move |(service, stop)| {
+                fetch(&service, stop.as_deref())
+            });
         }
     }
     fn request_feedback(&mut self, rating: i32, message: Option<String>) {
@@ -595,22 +705,44 @@ impl DataSource for LiveDataSource {
         self.feedback.request((), move |_| {
             let submission = FeedbackSubmission::validate(rating, message)
                 .map_err(|e: argus_data::Error| e.to_string())?;
-            client.submit_feedback(submission).map_err(|e: argus_data::Error| e.to_string())
+            client
+                .submit_feedback(submission)
+                .map_err(|e: argus_data::Error| e.to_string())
         });
     }
     fn preload_sync(&mut self) {
-        let Some(client) = self.client.clone() else { return };
+        let Some(client) = self.client.clone() else {
+            return;
+        };
         // Each call populates argus-data's TTL cache; the first background
         // poll then reuses it instead of hitting the upstream twice.
-        if let Ok(v) = client.get_bus_stops() { self.snap.bus_stops = v; }
-        if let Ok(v) = client.get_traffic_cameras() { self.snap.cameras = v; }
-        if let Ok(v) = client.get_traffic_incidents() { self.snap.incidents = v; }
-        if let Ok(v) = client.get_carpark_availability() { self.snap.carparks = v; }
-        if let Ok(v) = client.get_ev_charging_locations() { self.snap.ev_chargers = v; }
-        if let Ok(v) = client.get_weather() { self.snap.weather = v; }
-        if let Ok(v) = client.get_news() { self.snap.news = v; }
-        if let Ok(v) = client.get_flights() { self.snap.flights = v; }
-        if let Ok(v) = client.get_train_service_alerts() { self.snap.train_alerts = v; }
+        if let Ok(v) = client.get_bus_stops() {
+            self.snap.bus_stops = v;
+        }
+        if let Ok(v) = client.get_traffic_cameras() {
+            self.snap.cameras = v;
+        }
+        if let Ok(v) = client.get_traffic_incidents() {
+            self.snap.incidents = v;
+        }
+        if let Ok(v) = client.get_carpark_availability() {
+            self.snap.carparks = v;
+        }
+        if let Ok(v) = client.get_ev_charging_locations() {
+            self.snap.ev_chargers = v;
+        }
+        if let Ok(v) = client.get_weather() {
+            self.snap.weather = v;
+        }
+        if let Ok(v) = client.get_news() {
+            self.snap.news = v;
+        }
+        if let Ok(v) = client.get_flights() {
+            self.snap.flights = v;
+        }
+        if let Ok(v) = client.get_train_service_alerts() {
+            self.snap.train_alerts = v;
+        }
         self.sync_health();
     }
     fn cancel(&self) {
@@ -647,7 +779,10 @@ pub fn prefs_path() -> std::path::PathBuf {
         return std::path::PathBuf::from(dir).join("preferences.json");
     }
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-    std::path::PathBuf::from(home).join(".config").join("argus").join("preferences.json")
+    std::path::PathBuf::from(home)
+        .join(".config")
+        .join("argus")
+        .join("preferences.json")
 }
 
 pub fn load_prefs() -> PrefsFile {
@@ -658,12 +793,14 @@ pub fn load_prefs() -> PrefsFile {
 }
 
 pub fn save_prefs(prefs: &PrefsFile) {
-    let Ok(text) = serde_json::to_string_pretty(prefs) else { return };
+    let Ok(text) = serde_json::to_string_pretty(prefs) else {
+        return;
+    };
     let path = prefs_path();
-    if let Some(parent) = path.parent() {
-        if std::fs::create_dir_all(parent).is_err() {
-            return;
-        }
+    if let Some(parent) = path.parent()
+        && std::fs::create_dir_all(parent).is_err()
+    {
+        return;
     }
     // Write-then-rename: a crash never leaves a half-written preferences file.
     let tmp = path.with_extension("json.tmp");
@@ -674,9 +811,10 @@ pub fn save_prefs(prefs: &PrefsFile) {
 
 pub fn parse_visibility(value: &serde_json::Value) -> std::collections::HashMap<String, bool> {
     let defaults = argus_core::layers::default_sensor_visibility();
-    let mut out: std::collections::HashMap<String, bool> =
-        defaults.into_iter().collect();
-    if let Some(stored) = parse_sensor_visibility(value, &argus_core::layers::default_sensor_visibility()) {
+    let mut out: std::collections::HashMap<String, bool> = defaults.into_iter().collect();
+    if let Some(stored) =
+        parse_sensor_visibility(value, &argus_core::layers::default_sensor_visibility())
+    {
         out.extend(stored);
     }
     out

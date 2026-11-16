@@ -7,20 +7,22 @@ use std::collections::{HashMap, HashSet};
 
 use argus_core::amenity_layers::{AmenityFilters, AmenityRegistry};
 use argus_core::data::{DataDir, StaticData};
-use argus_core::geo::{GeoFilter, GEO_FILTER_DEFAULT_RADIUS_M};
+use argus_core::geo::{GEO_FILTER_DEFAULT_RADIUS_M, GeoFilter};
 use argus_core::mrt_routing::MrtRoutePlan;
 use argus_core::signals::{NotificationPrefs, SignalRow};
-use argus_core::types::{AmenityType, LngLat, MallStore, MapSearchResult, ParkFeatureKind, PlacePhoto};
-use argus_map::{MapState, Overlays, OverlayId, DEFAULT_CENTER, DEFAULT_ZOOM};
+use argus_core::types::{
+    AmenityType, LngLat, MallStore, MapSearchResult, ParkFeatureKind, PlacePhoto,
+};
+use argus_map::{DEFAULT_CENTER, DEFAULT_ZOOM, MapState, OverlayId, Overlays};
 use rune::TextEdit;
 
 use crate::images::ImageStore;
+use crate::live::{
+    DataSource, FeedKind, LiveDataSource, OnDemand, SourceStatus, def, load_prefs, parse_center,
+    parse_notifications, parse_radius, parse_station, parse_visibility,
+};
 use crate::mall_directory::MallDirectoryState;
 use crate::photo_gallery::PhotoGalleryState;
-use crate::live::{
-    def, load_prefs, parse_center, parse_notifications, parse_radius, parse_station,
-    parse_visibility, DataSource, FeedKind, LiveDataSource, OnDemand, SourceStatus,
-};
 
 /// What a map click / search hit locked onto; drives the focus dialog.
 #[allow(dead_code)]
@@ -107,7 +109,12 @@ pub struct FeedbackState {
 
 impl Default for FeedbackState {
     fn default() -> Self {
-        Self { open: false, sent: false, category: 0, message: TextEdit::new("") }
+        Self {
+            open: false,
+            sent: false,
+            category: 0,
+            message: TextEdit::new(""),
+        }
     }
 }
 
@@ -259,7 +266,12 @@ pub fn init() -> AppState {
         search_open: false,
         search_query: TextEdit::new(""),
         search_results: Vec::new(),
-        route: RouteState { start, end, target: MrtPickTarget::Start, plan: None },
+        route: RouteState {
+            start,
+            end,
+            target: MrtPickTarget::Start,
+            plan: None,
+        },
         route_picker: None,
         station_query: TextEdit::new(""),
         bus_route: BusRouteState::default(),
@@ -309,12 +321,20 @@ pub fn sg_clock() -> String {
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0);
     let local = secs.rem_euclid(86_400) + 8 * 3600;
-    format!("{:02}:{:02}:{:02}", (local / 3600) % 24, (local / 60) % 60, local % 60)
+    format!(
+        "{:02}:{:02}:{:02}",
+        (local / 3600) % 24,
+        (local / 60) % 60,
+        local % 60
+    )
 }
 
 impl AppState {
     pub fn geo_filter(&self) -> Option<GeoFilter> {
-        self.geo_center.map(|center| GeoFilter { center, radius_m: self.geo_radius_m })
+        self.geo_center.map(|center| GeoFilter {
+            center,
+            radius_m: self.geo_radius_m,
+        })
     }
 
     pub fn on_demand(&self) -> OnDemand {
@@ -327,7 +347,10 @@ impl AppState {
     /// Photo URLs for the current selection (already derived into
     /// `gallery_photos`). The gallery fetches these once and reuses handles.
     pub fn photo_urls(&self) -> Vec<String> {
-        self.gallery_photos.iter().map(|p| p.thumb.clone()).collect()
+        self.gallery_photos
+            .iter()
+            .map(|p| p.thumb.clone())
+            .collect()
     }
 
     /// Everything the image pipeline needs: stable photo URLs and the current
@@ -380,7 +403,10 @@ impl AppState {
         // A mall focus dialog loads its store list once (SWRImmutable in the
         // original). Filters live in `mall_directory` and reset per mall.
         match &self.selection {
-            Some(Selection::Amenity { kind: AmenityType::Mall, id }) => {
+            Some(Selection::Amenity {
+                kind: AmenityType::Mall,
+                id,
+            }) => {
                 self.mall_directory.for_mall(id);
                 if self.mall_stores_for.as_deref() != Some(id.as_str()) {
                     let indexed = self
@@ -390,7 +416,9 @@ impl AppState {
                     self.mall_stores = if indexed {
                         self.static_data
                             .as_ref()
-                            .and_then(|_| StaticData::load_mall_store_list(&DataDir::default(), id).ok())
+                            .and_then(|_| {
+                                StaticData::load_mall_store_list(&DataDir::default(), id).ok()
+                            })
                             .unwrap_or_default()
                     } else {
                         Vec::new()
@@ -415,13 +443,12 @@ impl AppState {
         self.search_results = crate::search::build_results(self);
 
         let snap = self.data.snapshot();
-        self.signals = argus_core::signals::build_signal_digest(
-            &argus_core::signals::DigestInput {
+        self.signals =
+            argus_core::signals::build_signal_digest(&argus_core::signals::DigestInput {
                 train_alerts: &snap.train_alerts,
                 incidents: &snap.incidents,
                 weather: &snap.weather,
-            },
-        );
+            });
         self.online_source_count = snap.sources.iter().filter(|s| s.status.is_ok()).count();
         self.active_source_count = snap
             .sources
@@ -485,7 +512,17 @@ pub fn scene_dashboard(s: &mut AppState) {
 
 pub fn scene_layers_on(s: &mut AppState) {
     s.data = Box::new(LiveDataSource::new());
-    for key in ["mrt", "busStops", "cameras", "incidents", "carparks", "evChargers", "parks", "malls", "hawkers"] {
+    for key in [
+        "mrt",
+        "busStops",
+        "cameras",
+        "incidents",
+        "carparks",
+        "evChargers",
+        "parks",
+        "malls",
+        "hawkers",
+    ] {
         s.visibility.insert(key.into(), true);
     }
     s.geo_center = Some([103.8460, 1.3200]);
@@ -500,7 +537,10 @@ pub fn scene_hover_popup(s: &mut AppState) {
     scene_panels(s);
     s.visibility.insert("incidents".into(), true);
     s.recompute();
-    let hovered = s.overlays.points.iter()
+    let hovered = s
+        .overlays
+        .points
+        .iter()
         .find(|p| matches!(s.overlay_targets.get(&p.id), Some(Target::Incident(_))))
         .map(|p| {
             let screen = s.map.camera.lnglat_to_screen(p.position);
@@ -528,7 +568,10 @@ pub fn scene_photo_gallery(s: &mut AppState) {
                 .map(|(name, _)| name.clone())
         })
         .unwrap_or_else(|| "Admiralty Park".into());
-    s.selection = Some(Selection::Park { name, kind: ParkFeatureKind::Park });
+    s.selection = Some(Selection::Park {
+        name,
+        kind: ParkFeatureKind::Park,
+    });
     s.preload_images = true;
     s.recompute();
 }
@@ -544,7 +587,10 @@ pub fn scene_mall_directory(s: &mut AppState) {
             .find(|id| d.malls.iter().any(|m| &m.id == *id))
             .cloned()
     });
-    s.selection = id.map(|id| Selection::Amenity { kind: AmenityType::Mall, id });
+    s.selection = id.map(|id| Selection::Amenity {
+        kind: AmenityType::Mall,
+        id,
+    });
     s.preload_images = true;
     s.recompute();
 }
@@ -562,22 +608,31 @@ pub fn scene_poi_dialog(s: &mut AppState) {
     s.visibility.insert("malls".into(), true);
     // Prefer a mall that has both a photo and an indexed store directory so
     // the POI dialog golden exercises both new panels.
-    let id = s.static_data.as_ref().and_then(|d| {
-        d.mall_store_index
-            .malls
-            .keys()
-            .find(|id| {
-                d.malls.iter().any(|m| &m.id == *id && !m.photos.is_empty())
-            })
-            .cloned()
-    }).or_else(|| {
-        s.registry
-            .as_ref()
-            .and_then(|r| r.layers.iter().find(|l| l.amenity_type == AmenityType::Mall))
-            .and_then(|l| l.places.first())
-            .map(|p| p.id().to_string())
+    let id = s
+        .static_data
+        .as_ref()
+        .and_then(|d| {
+            d.mall_store_index
+                .malls
+                .keys()
+                .find(|id| d.malls.iter().any(|m| &m.id == *id && !m.photos.is_empty()))
+                .cloned()
+        })
+        .or_else(|| {
+            s.registry
+                .as_ref()
+                .and_then(|r| {
+                    r.layers
+                        .iter()
+                        .find(|l| l.amenity_type == AmenityType::Mall)
+                })
+                .and_then(|l| l.places.first())
+                .map(|p| p.id().to_string())
+        });
+    s.selection = id.map(|id| Selection::Amenity {
+        kind: AmenityType::Mall,
+        id,
     });
-    s.selection = id.map(|id| Selection::Amenity { kind: AmenityType::Mall, id });
     s.preload_images = true;
     s.recompute();
 }
@@ -615,7 +670,12 @@ pub fn scene_camera_dialog(s: &mut AppState) {
     // Scenes run before `setup`; fetch the feed here too so the dialog has a
     // camera to open. `setup` re-preloads from the client's TTL cache.
     s.data.preload_sync();
-    s.camera_dialog = s.data.snapshot().cameras.first().map(|c| c.camera_id.clone());
+    s.camera_dialog = s
+        .data
+        .snapshot()
+        .cameras
+        .first()
+        .map(|c| c.camera_id.clone());
     s.recompute();
 }
 
@@ -628,7 +688,13 @@ pub fn scene_panels(s: &mut AppState) {
     s.visibility.insert("cameras".into(), true);
     s.bus_search = TextEdit::new("Bukit");
     s.weather_history = (0..24)
-        .map(|i| (28.5 + (i as f64 * 0.17).sin() * 2.0, 70.0 + i as f64 * 0.3, 52.0 + i as f64 * 0.2))
+        .map(|i| {
+            (
+                28.5 + (i as f64 * 0.17).sin() * 2.0,
+                70.0 + i as f64 * 0.3,
+                52.0 + i as f64 * 0.2,
+            )
+        })
         .collect();
     s.recompute();
 }

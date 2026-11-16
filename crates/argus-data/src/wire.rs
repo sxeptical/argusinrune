@@ -47,7 +47,9 @@ pub enum WireTrafficImagesResponse {
 impl WireTrafficImagesResponse {
     pub fn into_cameras(self) -> Vec<RawTrafficImage> {
         match self {
-            WireTrafficImagesResponse::Flat { value } => value.into_iter().map(Into::into).collect(),
+            WireTrafficImagesResponse::Flat { value } => {
+                value.into_iter().map(Into::into).collect()
+            }
             WireTrafficImagesResponse::Grouped { value } => value
                 .into_iter()
                 .flat_map(|g| g.cameras.into_iter().map(Into::into))
@@ -141,7 +143,11 @@ impl From<WireEvLocation> for RawEvLocation {
                             plug_type: t.plug_type,
                             current: t.current,
                             power_rating: t.power_rating,
-                            ev_ids: t.ev_ids.into_iter().map(|e| EvId { status: e.status }).collect(),
+                            ev_ids: t
+                                .ev_ids
+                                .into_iter()
+                                .map(|e| EvId { status: e.status })
+                                .collect(),
                         })
                         .collect(),
                 })

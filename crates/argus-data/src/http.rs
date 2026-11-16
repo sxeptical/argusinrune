@@ -12,8 +12,7 @@ use serde::de::DeserializeOwned;
 use crate::error::{Error, Result};
 
 pub const DEFAULT_TIMEOUT_MS: u64 = 10_000;
-pub const USER_AGENT: &str =
-    "Argus/0.1 (Singapore OSINT dashboard; reqwest/rustls; +https://github.com/curioputterings/argus)";
+pub const USER_AGENT: &str = "Argus/0.1 (Singapore OSINT dashboard; reqwest/rustls; +https://github.com/curioputterings/argus)";
 
 #[derive(Clone, Debug)]
 pub struct HttpRequest {
@@ -36,7 +35,11 @@ pub trait Transport: Send + Sync {
     fn get(&self, request: &HttpRequest) -> Result<HttpResponse>;
 
     fn post(&self, _request: &HttpRequest, _body: &[u8]) -> Result<HttpResponse> {
-        Err(Error::external("http", 502, "POST is not supported by this transport"))
+        Err(Error::external(
+            "http",
+            502,
+            "POST is not supported by this transport",
+        ))
     }
 }
 
@@ -79,20 +82,28 @@ impl Transport for ReqwestTransport {
             })?;
 
         let status = response.status().as_u16();
-        if let Some(max) = request.max_bytes {
-            if let Some(len) = response.content_length() {
-                if len as usize > max {
-                    return Ok(HttpResponse { status, body: Vec::new() });
-                }
-            }
+        if let Some(max) = request.max_bytes
+            && let Some(len) = response.content_length()
+            && len as usize > max
+        {
+            return Ok(HttpResponse {
+                status,
+                body: Vec::new(),
+            });
         }
         let bytes = response.bytes().map_err(|e| {
             Error::external("http", 502, format!("failed to read response body: {e}"))
         })?;
         if request.max_bytes.is_some_and(|max| bytes.len() > max) {
-            return Ok(HttpResponse { status, body: Vec::new() });
+            return Ok(HttpResponse {
+                status,
+                body: Vec::new(),
+            });
         }
-        Ok(HttpResponse { status, body: bytes.to_vec() })
+        Ok(HttpResponse {
+            status,
+            body: bytes.to_vec(),
+        })
     }
 
     fn post(&self, request: &HttpRequest, body: &[u8]) -> Result<HttpResponse> {
@@ -134,7 +145,9 @@ impl Default for HttpClient {
 
 impl HttpClient {
     pub fn new() -> Self {
-        Self { transport: Arc::new(ReqwestTransport::default()) }
+        Self {
+            transport: Arc::new(ReqwestTransport::default()),
+        }
     }
 
     pub fn with_transport(transport: Arc<dyn Transport>) -> Self {

@@ -29,7 +29,12 @@ impl Rgba {
     pub const TRANSPARENT: Self = Self::new(0.0, 0.0, 0.0, 0.0);
 
     pub fn to_rune(self) -> rune::Color {
-        rune::Color { r: self.r, g: self.g, b: self.b, a: self.a }
+        rune::Color {
+            r: self.r,
+            g: self.g,
+            b: self.b,
+            a: self.a,
+        }
     }
 }
 
@@ -74,7 +79,11 @@ pub struct MapPoint {
 
 impl MapPoint {
     pub fn new(id: OverlayId, position: LngLat, style: PointStyle) -> Self {
-        Self { id, position, style }
+        Self {
+            id,
+            position,
+            style,
+        }
     }
 }
 
@@ -158,7 +167,10 @@ impl Overlays {
                 // Unique key: never group when clustering is off.
                 (i64::MIN ^ p.id as i64, p.id as i64)
             };
-            buckets.entry(key).or_default().push(VisiblePoint { point: p, sx, sy });
+            buckets
+                .entry(key)
+                .or_default()
+                .push(VisiblePoint { point: p, sx, sy });
         }
 
         let mut out = Vec::with_capacity(buckets.len());
@@ -195,7 +207,13 @@ impl Overlays {
 
     /// Nearest overlay point to a screen position within `tolerance` points.
     /// Returns the app's id so it can open a popup / select a feature.
-    pub fn hit_test(&self, camera: &MapCamera, sx: f32, sy: f32, tolerance: f32) -> Option<OverlayId> {
+    pub fn hit_test(
+        &self,
+        camera: &MapCamera,
+        sx: f32,
+        sy: f32,
+        tolerance: f32,
+    ) -> Option<OverlayId> {
         let mut best: Option<(f32, OverlayId)> = None;
         let tol2 = tolerance * tolerance;
         for p in &self.points {
@@ -203,7 +221,7 @@ impl Overlays {
             let dx = px - sx;
             let dy = py - sy;
             let d2 = dx * dx + dy * dy;
-            if d2 <= tol2 && best.map_or(true, |(b, _)| d2 < b) {
+            if d2 <= tol2 && best.is_none_or(|(b, _)| d2 < b) {
                 best = Some((d2, p.id));
             }
         }
@@ -213,7 +231,11 @@ impl Overlays {
     /// Point-in-polygon hit test (ray casting), for park / area selection.
     pub fn hit_test_polygon(&self, camera: &MapCamera, sx: f32, sy: f32) -> Option<OverlayId> {
         for poly in &self.polygons {
-            let pts: Vec<(f32, f32)> = poly.points.iter().map(|p| camera.lnglat_to_screen(*p)).collect();
+            let pts: Vec<(f32, f32)> = poly
+                .points
+                .iter()
+                .map(|p| camera.lnglat_to_screen(*p))
+                .collect();
             if point_in_polygon(sx, sy, &pts) {
                 return Some(poly.id);
             }
@@ -235,7 +257,11 @@ pub struct ClusterOptions {
 
 impl Default for ClusterOptions {
     fn default() -> Self {
-        Self { cell_px: 44.0, max_cluster_zoom: 12.0, margin_px: 24.0 }
+        Self {
+            cell_px: 44.0,
+            max_cluster_zoom: 12.0,
+            margin_px: 24.0,
+        }
     }
 }
 
@@ -358,7 +384,13 @@ mod tests {
         let mut ov = Overlays::new();
         ov = ov.with_point(point(1, 103.8198, 1.3521)); // centre -> visible
         ov = ov.with_point(point(2, 100.0, 1.3521)); // far west -> culled
-        let drawn = ov.drawn_points(&camera(11.0), ClusterOptions { margin_px: 0.0, ..Default::default() });
+        let drawn = ov.drawn_points(
+            &camera(11.0),
+            ClusterOptions {
+                margin_px: 0.0,
+                ..Default::default()
+            },
+        );
         assert_eq!(drawn.len(), 1);
         assert_eq!(drawn[0].ids, vec![1]);
     }
@@ -397,7 +429,10 @@ mod tests {
         let square = [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)];
         assert!(point_in_polygon(5.0, 5.0, &square));
         assert!(!point_in_polygon(20.0, 5.0, &square));
-        assert_eq!(distance_to_polyline(5.0, 2.0, &[(0.0, 0.0), (10.0, 0.0)]), 2.0);
+        assert_eq!(
+            distance_to_polyline(5.0, 2.0, &[(0.0, 0.0), (10.0, 0.0)]),
+            2.0
+        );
     }
 
     #[test]
@@ -405,7 +440,9 @@ mod tests {
         let ring = radius_circle_ring(LngLat::new(103.82, 1.35), 1000.0, 64);
         assert_eq!(ring.len(), 64);
         // 1km at 1.35N is ~0.009 degrees latitude.
-        let lat_span = ring.iter().fold((f64::MAX, f64::MIN), |(a, b), p| (a.min(p.lat), b.max(p.lat)));
+        let lat_span = ring.iter().fold((f64::MAX, f64::MIN), |(a, b), p| {
+            (a.min(p.lat), b.max(p.lat))
+        });
         assert!((lat_span.1 - lat_span.0 - 2.0 * 1000.0 / 111_320.0).abs() < 1e-6);
     }
 }

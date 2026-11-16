@@ -55,7 +55,11 @@ fn transfer_minutes(station: &str, line_count: usize) -> f64 {
         "Dhoby Ghaut" | "Outram Park" => 6.0,
         "Marina Bay" => 4.0,
         _ => {
-            if line_count >= 3 { 5.0 } else { 3.0 }
+            if line_count >= 3 {
+                5.0
+            } else {
+                3.0
+            }
         }
     }
 }
@@ -100,30 +104,30 @@ impl MinHeap {
         }
         let top = self.items[0].clone();
         let last = self.items.pop();
-        if !self.items.is_empty() {
-            if let Some(last) = last {
-                self.items[0] = last;
-                let mut i = 0;
-                loop {
-                    let left = i * 2 + 1;
-                    let right = i * 2 + 2;
-                    let mut smallest = i;
-                    if left < self.items.len()
-                        && self.items[left].distance < self.items[smallest].distance
-                    {
-                        smallest = left;
-                    }
-                    if right < self.items.len()
-                        && self.items[right].distance < self.items[smallest].distance
-                    {
-                        smallest = right;
-                    }
-                    if smallest == i {
-                        break;
-                    }
-                    self.items.swap(i, smallest);
-                    i = smallest;
+        if !self.items.is_empty()
+            && let Some(last) = last
+        {
+            self.items[0] = last;
+            let mut i = 0;
+            loop {
+                let left = i * 2 + 1;
+                let right = i * 2 + 2;
+                let mut smallest = i;
+                if left < self.items.len()
+                    && self.items[left].distance < self.items[smallest].distance
+                {
+                    smallest = left;
                 }
+                if right < self.items.len()
+                    && self.items[right].distance < self.items[smallest].distance
+                {
+                    smallest = right;
+                }
+                if smallest == i {
+                    break;
+                }
+                self.items.swap(i, smallest);
+                i = smallest;
             }
         }
         Some(top)
@@ -290,7 +294,10 @@ pub fn plan_mrt_route(start: &str, end: &str) -> Option<MrtRoutePlan> {
     for key in start_keys {
         distances.insert(key.clone(), 0.0);
         previous.insert(key.clone(), None);
-        queue.push(HeapEntry { key: key.clone(), distance: 0.0 });
+        queue.push(HeapEntry {
+            key: key.clone(),
+            distance: 0.0,
+        });
     }
 
     let mut best_end_key: Option<String> = None;
@@ -310,7 +317,10 @@ pub fn plan_mrt_route(start: &str, end: &str) -> Option<MrtRoutePlan> {
             if known.is_none() || next < *known.unwrap() {
                 distances.insert(to.clone(), next);
                 previous.insert(to.clone(), Some(current.key.clone()));
-                queue.push(HeapEntry { key: to.clone(), distance: next });
+                queue.push(HeapEntry {
+                    key: to.clone(),
+                    distance: next,
+                });
             }
         }
     }
@@ -339,14 +349,20 @@ pub fn plan_mrt_route(start: &str, end: &str) -> Option<MrtRoutePlan> {
         }
     }
 
-    let (segments, transfers, transfer_stations) = make_route_segments(&path_nodes.iter().map(|n| (*n).clone()).collect::<Vec<_>>());
+    let (segments, transfers, transfer_stations) =
+        make_route_segments(&path_nodes.iter().map(|n| (*n).clone()).collect::<Vec<_>>());
     let travel_minutes: f64 = segments
         .iter()
         .map(|seg| seg.stops as f64 * minutes_per_stop(&seg.line))
         .sum();
     let transfer_minutes_total: f64 = transfer_stations
         .iter()
-        .map(|station| transfer_minutes(station, NETWORK.station_to_keys.get(station).map_or(0, |k| k.len())))
+        .map(|station| {
+            transfer_minutes(
+                station,
+                NETWORK.station_to_keys.get(station).map_or(0, |k| k.len()),
+            )
+        })
         .sum();
     let estimated_minutes = travel_minutes + transfer_minutes_total + ENTRY_EXIT_BUFFER_MINUTES;
 
@@ -402,24 +418,34 @@ mod tests {
     fn lrt_loop_routes() {
         let route = plan_mrt_route("Ranggung", "Compassvale").unwrap();
         assert_eq!(route.transfers, 0);
-        assert_eq!(route.segments, vec![MrtRouteSegment {
-            line: "Sengkang LRT East Loop".into(),
-            from: "Ranggung".into(),
-            to: "Compassvale".into(),
-            stops: 2,
-            stations: vec!["Ranggung".into(), "Sengkang".into(), "Compassvale".into()],
-        }]);
+        assert_eq!(
+            route.segments,
+            vec![MrtRouteSegment {
+                line: "Sengkang LRT East Loop".into(),
+                from: "Ranggung".into(),
+                to: "Compassvale".into(),
+                stops: 2,
+                stations: vec!["Ranggung".into(), "Sengkang".into(), "Compassvale".into()],
+            }]
+        );
         let route = plan_mrt_route("Senja", "Bukit Panjang").unwrap();
-        assert_eq!(route.segments, vec![MrtRouteSegment {
-            line: "Bukit Panjang LRT".into(),
-            from: "Senja".into(),
-            to: "Bukit Panjang".into(),
-            stops: 1,
-            stations: vec!["Senja".into(), "Bukit Panjang".into()],
-        }]);
+        assert_eq!(
+            route.segments,
+            vec![MrtRouteSegment {
+                line: "Bukit Panjang LRT".into(),
+                from: "Senja".into(),
+                to: "Bukit Panjang".into(),
+                stops: 1,
+                stations: vec!["Senja".into(), "Bukit Panjang".into()],
+            }]
+        );
         let route = plan_mrt_route("Renjong", "Kovan").unwrap();
         assert_eq!(
-            route.segments.iter().map(|s| s.line.as_str()).collect::<Vec<_>>(),
+            route
+                .segments
+                .iter()
+                .map(|s| s.line.as_str())
+                .collect::<Vec<_>>(),
             ["Sengkang LRT West Loop", "North East Line"]
         );
         assert_eq!(route.segments[0].to, "Sengkang");

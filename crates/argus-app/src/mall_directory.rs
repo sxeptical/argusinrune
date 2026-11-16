@@ -121,7 +121,10 @@ mod tests {
         assert_eq!(view.total, 3);
         assert_eq!(view.shown, 3);
         assert_eq!(view.groups.len(), 3, "grouped by level");
-        assert_eq!(view.groups[0].label, "Basement 1", "levels sort basement first");
+        assert_eq!(
+            view.groups[0].label, "Basement 1",
+            "levels sort basement first"
+        );
         assert_eq!(view.categories.len(), 2);
         assert!(view.has_halal);
 

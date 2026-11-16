@@ -39,18 +39,24 @@ pub fn parse_sensor_visibility(
 }
 
 /// `null` is valid (the filter was cleared); malformed arrays are rejected.
-pub fn parse_geo_filter_center(stored: &Value) -> Result<Option<LngLat>, ()> {
+pub fn parse_geo_filter_center(stored: &Value) -> Result<Option<LngLat>, &'static str> {
     if stored.is_null() {
         return Ok(None);
     }
-    let arr = stored.as_array().ok_or(())?;
+    let arr = stored
+        .as_array()
+        .ok_or("geo filter center must be an array")?;
     if arr.len() != 2 {
-        return Err(());
+        return Err("geo filter center must have two coordinates");
     }
-    let lng = arr[0].as_f64().ok_or(())?;
-    let lat = arr[1].as_f64().ok_or(())?;
+    let lng = arr[0]
+        .as_f64()
+        .ok_or("geo filter longitude must be a number")?;
+    let lat = arr[1]
+        .as_f64()
+        .ok_or("geo filter latitude must be a number")?;
     if !lng.is_finite() || !lat.is_finite() || lng.abs() > 180.0 || lat.abs() > 90.0 {
-        return Err(());
+        return Err("geo filter center is out of range");
     }
     Ok(Some([lng, lat]))
 }
@@ -83,7 +89,10 @@ pub fn parse_notification_prefs(stored: &Value) -> Option<NotificationPrefs> {
 
 fn notification_defaults() -> BTreeMap<String, bool> {
     [
-        ("rail", true), ("road", true), ("weather", true), ("browser", false),
+        ("rail", true),
+        ("road", true),
+        ("weather", true),
+        ("browser", false),
     ]
     .iter()
     .map(|(k, v)| (k.to_string(), *v))
@@ -91,17 +100,26 @@ fn notification_defaults() -> BTreeMap<String, bool> {
 }
 
 fn all_categories() -> [SignalCategory; 3] {
-    [SignalCategory::Rail, SignalCategory::Road, SignalCategory::Weather]
+    [
+        SignalCategory::Rail,
+        SignalCategory::Road,
+        SignalCategory::Weather,
+    ]
 }
 
 pub fn parse_seen_signals(stored: &Value) -> Option<SeenSignals> {
     let obj = stored.as_object()?;
     let mut seen = SeenSignals::new();
     for category in all_categories() {
-        if let Some(ids) = obj.get(category.as_str()).and_then(Value::as_array) {
-            if ids.iter().all(Value::is_string) {
-                seen.insert(category, ids.iter().filter_map(|v| v.as_str().map(str::to_string)).collect());
-            }
+        if let Some(ids) = obj.get(category.as_str()).and_then(Value::as_array)
+            && ids.iter().all(Value::is_string)
+        {
+            seen.insert(
+                category,
+                ids.iter()
+                    .filter_map(|v| v.as_str().map(str::to_string))
+                    .collect(),
+            );
         }
     }
     Some(seen)
@@ -144,15 +162,20 @@ pub trait Timestamped {
 }
 
 /// Union of two point lists; on a shared timestamp the right-hand wins.
-pub fn merge_point_lists<T: Timestamped + Clone>(
-    persisted: &[T],
-    current: &[T],
-) -> Vec<T> {
-    if persisted.is_empty() { return current.to_vec(); }
-    if current.is_empty() { return persisted.to_vec(); }
+pub fn merge_point_lists<T: Timestamped + Clone>(persisted: &[T], current: &[T]) -> Vec<T> {
+    if persisted.is_empty() {
+        return current.to_vec();
+    }
+    if current.is_empty() {
+        return persisted.to_vec();
+    }
     let mut merged: BTreeMap<String, T> = BTreeMap::new();
-    for point in persisted { merged.insert(point.timestamp().to_string(), point.clone()); }
-    for point in current { merged.insert(point.timestamp().to_string(), point.clone()); }
+    for point in persisted {
+        merged.insert(point.timestamp().to_string(), point.clone());
+    }
+    for point in current {
+        merged.insert(point.timestamp().to_string(), point.clone());
+    }
     merged.into_values().collect()
 }
 
@@ -184,47 +207,93 @@ mod tests {
 
     #[test]
     fn parses_sensor_and_geo_prefs() {
-        let defaults: BTreeMap<String, bool> = [("flights".into(), true), ("parks".into(), false)].into_iter().collect();
+        let defaults: BTreeMap<String, bool> = [("flights".into(), true), ("parks".into(), false)]
+            .into_iter()
+            .collect();
         let parsed = parse_sensor_visibility(&json!({"flights": false}), &defaults).unwrap();
-        assert_eq!(parsed["flights"], false);
-        assert_eq!(parsed["parks"], false);
+        assert!(!parsed["flights"]);
+        assert!(!parsed["parks"]);
         assert!(parse_sensor_visibility(&Value::Null, &defaults).is_none());
-        let all_on: BTreeMap<String, bool> = [("flights".into(), true), ("parks".into(), true)].into_iter().collect();
-        assert_eq!(parse_layer_option_selection(&json!({"flights": false, "parks": false}), &all_on).unwrap(), all_on);
+        let all_on: BTreeMap<String, bool> = [("flights".into(), true), ("parks".into(), true)]
+            .into_iter()
+            .collect();
+        assert_eq!(
+            parse_layer_option_selection(&json!({"flights": false, "parks": false}), &all_on)
+                .unwrap(),
+            all_on
+        );
         assert_eq!(parse_geo_filter_center(&Value::Null).unwrap(), None);
-        assert_eq!(parse_geo_filter_center(&json!([103.85, 1.29])).unwrap(), Some([103.85, 1.29]));
+        assert_eq!(
+            parse_geo_filter_center(&json!([103.85, 1.29])).unwrap(),
+            Some([103.85, 1.29])
+        );
         assert!(parse_geo_filter_center(&json!([200, 1.29])).is_err());
-        assert_eq!(parse_geo_filter_radius(&json!(1)).unwrap(), GEO_FILTER_MIN_RADIUS_M);
-        assert_eq!(parse_geo_filter_radius(&json!(1e9)).unwrap(), GEO_FILTER_MAX_RADIUS_M);
+        assert_eq!(
+            parse_geo_filter_radius(&json!(1)).unwrap(),
+            GEO_FILTER_MIN_RADIUS_M
+        );
+        assert_eq!(
+            parse_geo_filter_radius(&json!(1e9)).unwrap(),
+            GEO_FILTER_MAX_RADIUS_M
+        );
     }
 
     #[test]
     fn parses_mrt_notifications_and_keys() {
-        assert_eq!(parse_mrt_station(&json!("Raffles Place")).unwrap(), "Raffles Place");
+        assert_eq!(
+            parse_mrt_station(&json!("Raffles Place")).unwrap(),
+            "Raffles Place"
+        );
         assert!(parse_mrt_station(&json!("")).is_none());
         let prefs = parse_notification_prefs(&json!({"road": false, "browser": "yes"})).unwrap();
         assert!(!prefs.road && prefs.rail && !prefs.browser);
         let seen = parse_seen_signals(&json!({"rail": ["a"], "road": [1]})).unwrap();
         assert_eq!(seen.len(), 1);
-        assert_eq!(pref_key("panel-expanded", "MRT ROUTER"), "argus.prefs.panel-expanded.v1:mrt-router");
+        assert_eq!(
+            pref_key("panel-expanded", "MRT ROUTER"),
+            "argus.prefs.panel-expanded.v1:mrt-router"
+        );
     }
 
     #[derive(Clone, PartialEq, Debug)]
-    struct Point { timestamp: String, value: i64 }
+    struct Point {
+        timestamp: String,
+        value: i64,
+    }
     impl Timestamped for Point {
-        fn timestamp(&self) -> &str { &self.timestamp }
+        fn timestamp(&self) -> &str {
+            &self.timestamp
+        }
     }
 
     #[test]
     fn merges_point_lists_and_stores() {
-        let p1 = Point { timestamp: "2026-01-01T00:00:00.000Z".into(), value: 1 };
-        let p2 = Point { timestamp: "2026-01-01T00:05:00.000Z".into(), value: 2 };
-        let p2b = Point { timestamp: "2026-01-01T00:05:00.000Z".into(), value: 20 };
-        let merged = merge_point_lists(&[p1.clone(), p2.clone()], &[p2b.clone()]);
+        let p1 = Point {
+            timestamp: "2026-01-01T00:00:00.000Z".into(),
+            value: 1,
+        };
+        let p2 = Point {
+            timestamp: "2026-01-01T00:05:00.000Z".into(),
+            value: 2,
+        };
+        let p2b = Point {
+            timestamp: "2026-01-01T00:05:00.000Z".into(),
+            value: 20,
+        };
+        let merged = merge_point_lists(&[p1.clone(), p2.clone()], std::slice::from_ref(&p2b));
         assert_eq!(merged, vec![p1, p2b.clone()]);
-        let current: BTreeMap<String, Vec<Point>> = [("service".to_string(), vec![p2b])].into_iter().collect();
+        let current: BTreeMap<String, Vec<Point>> =
+            [("service".to_string(), vec![p2b])].into_iter().collect();
         assert!(merge_point_stores(&BTreeMap::new(), &current) == current);
-        let persisted: BTreeMap<String, Vec<Point>> = [("service".to_string(), vec![Point { timestamp: "2026-01-01T00:00:00.000Z".into(), value: 1 }])].into_iter().collect();
+        let persisted: BTreeMap<String, Vec<Point>> = [(
+            "service".to_string(),
+            vec![Point {
+                timestamp: "2026-01-01T00:00:00.000Z".into(),
+                value: 1,
+            }],
+        )]
+        .into_iter()
+        .collect();
         assert!(merge_point_stores(&persisted, &current) != current);
     }
 }

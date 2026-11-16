@@ -22,32 +22,28 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::time::Duration;
 
-use rune::{Image, ImageCache, Latest, Waker};
 use crate::projection::TileCoord;
+use rune::{Image, ImageCache, Latest, Waker};
 
 /// Descriptive User-Agent for tile requests (CARTO asks clients to identify themselves).
-pub const USER_AGENT: &str = "ArgusMap/0.1 (Singapore OSINT dashboard; https://github.com/sxeptical/argusinrune)";
+pub const USER_AGENT: &str =
+    "ArgusMap/0.1 (Singapore OSINT dashboard; https://github.com/sxeptical/argusinrune)";
 /// Attribution for the default Esri Dark Gray basemap (must stay visible).
 pub const ATTRIBUTION: &str = "Tiles © Esri · Esri, HERE, Garmin, © OpenStreetMap contributors";
 /// Attribution for the optional CARTO basemaps.
 pub const CARTO_ATTRIBUTION: &str = "© OpenStreetMap contributors · © CARTO";
 
 /// Dark raster basemap source.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum TileSource {
     /// Esri World Dark Gray Canvas, **base** layer (roads/land, no labels).
     /// Keyless, dark, 256px JPEG. Default.
+    #[default]
     EsriDarkGray,
     /// CARTO Dark Matter with labels (requires an API key).
     CartoDarkAll,
     /// CARTO Dark Matter without labels (requires an API key).
     CartoDarkNoLabels,
-}
-
-impl Default for TileSource {
-    fn default() -> Self {
-        Self::EsriDarkGray
-    }
 }
 
 impl TileSource {
@@ -63,9 +59,13 @@ impl TileSource {
     /// The tile URL template. CARTO needs `?key=…` appended by the caller.
     pub fn template(self) -> &'static str {
         match self {
-            Self::EsriDarkGray => "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+            Self::EsriDarkGray => {
+                "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"
+            }
             Self::CartoDarkAll => "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-            Self::CartoDarkNoLabels => "https://a.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png",
+            Self::CartoDarkNoLabels => {
+                "https://a.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png"
+            }
         }
     }
 
@@ -79,12 +79,15 @@ impl TileSource {
 
     /// Concrete URL for one tile. `key` is appended to CARTO requests.
     pub fn url(self, t: TileCoord, key: Option<&str>) -> String {
-        let base = self.template()
+        let base = self
+            .template()
             .replace("{z}", &t.z.to_string())
             .replace("{x}", &t.x.to_string())
             .replace("{y}", &t.y.to_string());
         match (self, key) {
-            (Self::CartoDarkAll | Self::CartoDarkNoLabels, Some(k)) if !k.is_empty() => format!("{base}?key={k}"),
+            (Self::CartoDarkAll | Self::CartoDarkNoLabels, Some(k)) if !k.is_empty() => {
+                format!("{base}?key={k}")
+            }
             _ => base,
         }
     }
@@ -108,27 +111,33 @@ fn client() -> &'static reqwest::blocking::Client {
 /// Resolve a writable cache directory without adding a `dirs` dependency.
 /// Honours `ARGUS_CACHE_DIR` and the platform cache location.
 pub fn cache_dir() -> PathBuf {
-    if let Ok(dir) = std::env::var("ARGUS_CACHE_DIR") {
-        if !dir.is_empty() {
-            return PathBuf::from(dir);
-        }
+    if let Ok(dir) = std::env::var("ARGUS_CACHE_DIR")
+        && !dir.is_empty()
+    {
+        return PathBuf::from(dir);
     }
     #[cfg(target_os = "macos")]
-    let base = std::env::var_os("HOME").map(PathBuf::from).map(|p| p.join("Library/Caches"));
+    let base = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .map(|p| p.join("Library/Caches"));
     #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
     let base = std::env::var_os("XDG_CACHE_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache")));
     #[cfg(target_os = "windows")]
     let base = std::env::var_os("LOCALAPPDATA").map(PathBuf::from);
-    let root = base.unwrap_or_else(|| std::env::temp_dir());
+    let root = base.unwrap_or_else(std::env::temp_dir);
     root.join("argus").join("argus-map").join("tiles")
 }
 
 fn disk_path(dir: &Path, source: TileSource, t: TileCoord) -> PathBuf {
     // Esri serves JPEG; CARTO serves PNG. Keep the real extension so content
     // sniffing / manual inspection works.
-    let ext = if source == TileSource::EsriDarkGray { "jpg" } else { "png" };
+    let ext = if source == TileSource::EsriDarkGray {
+        "jpg"
+    } else {
+        "png"
+    };
     dir.join(source.cache_name())
         .join(t.z.to_string())
         .join(t.x.to_string())
@@ -145,7 +154,11 @@ struct ImageLru {
 
 impl ImageLru {
     fn new(cap: usize) -> Self {
-        Self { map: HashMap::new(), order: VecDeque::new(), cap }
+        Self {
+            map: HashMap::new(),
+            order: VecDeque::new(),
+            cap,
+        }
     }
 
     fn get(&mut self, key: &TileCoord) -> Option<&Image> {
@@ -209,7 +222,9 @@ impl TileStore {
     pub fn new(source: TileSource, memory_cap: usize) -> Self {
         Self {
             source,
-            api_key: std::env::var("ARGUS_CARTO_KEY").ok().filter(|s| !s.is_empty()),
+            api_key: std::env::var("ARGUS_CARTO_KEY")
+                .ok()
+                .filter(|s| !s.is_empty()),
             cache_dir: cache_dir(),
             fetch: Latest::default().debounce(Duration::from_millis(40)),
             images: ImageLru::new(memory_cap.max(1)),
@@ -287,7 +302,11 @@ impl TileStore {
                         // Write atomically: a partial file is never a cache hit.
                         if let Some(parent) = path.parent() {
                             let _ = std::fs::create_dir_all(parent);
-                            let ext = if source == TileSource::EsriDarkGray { "jpg.tmp" } else { "png.tmp" };
+                            let ext = if source == TileSource::EsriDarkGray {
+                                "jpg.tmp"
+                            } else {
+                                "png.tmp"
+                            };
                             let tmp = path.with_extension(ext);
                             if std::fs::write(&tmp, bytes).is_ok() {
                                 let _ = std::fs::rename(&tmp, &path);
@@ -306,7 +325,9 @@ impl TileStore {
     /// Land a fetched batch: create image handles (decode runs on Rune's
     /// worker) and drop in-flight markers. Returns true if visible state changed.
     pub fn poll(&mut self) -> bool {
-        let Some(batch) = self.fetch.take() else { return false };
+        let Some(batch) = self.fetch.take() else {
+            return false;
+        };
         let mut changed = false;
         for (t, bytes) in batch {
             let Some(bytes) = bytes else {
@@ -315,7 +336,9 @@ impl TileStore {
                 continue;
             };
             self.inflight.remove(&t); // may be re-requested if later evicted
-            let Some(cache) = &self.image_cache else { continue };
+            let Some(cache) = &self.image_cache else {
+                continue;
+            };
             let image = cache.load(bytes);
             self.images.insert(t, image);
             changed = true;
@@ -368,12 +391,18 @@ impl TileStore {
             }
             let path = disk_path(&dir, source, *t);
             let bytes = std::fs::read(&path).ok().or_else(|| {
-                let got = client().get(&source.url(*t, key.as_deref())).send().and_then(|r| r.error_for_status()).and_then(|r| r.bytes()).map(|b| b.to_vec()).ok();
-                if let Some(b) = &got {
-                    if let Some(parent) = path.parent() {
-                        let _ = std::fs::create_dir_all(parent);
-                        let _ = std::fs::write(&path, b);
-                    }
+                let got = client()
+                    .get(source.url(*t, key.as_deref()))
+                    .send()
+                    .and_then(|r| r.error_for_status())
+                    .and_then(|r| r.bytes())
+                    .map(|b| b.to_vec())
+                    .ok();
+                if let Some(b) = &got
+                    && let Some(parent) = path.parent()
+                {
+                    let _ = std::fs::create_dir_all(parent);
+                    let _ = std::fs::write(&path, b);
                 }
                 got
             });

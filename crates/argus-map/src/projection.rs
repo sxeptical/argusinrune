@@ -106,7 +106,10 @@ pub fn world_y_to_lat(y: f64, zoom: f64) -> f64 {
 
 /// Project a lng/lat into fractional world pixels at `zoom`.
 pub fn project(lnglat: LngLat, zoom: f64) -> (f64, f64) {
-    (lon_to_world_x(lnglat.lon, zoom), lat_to_world_y(lnglat.lat, zoom))
+    (
+        lon_to_world_x(lnglat.lon, zoom),
+        lat_to_world_y(lnglat.lat, zoom),
+    )
 }
 
 /// Unproject world pixels at `zoom` back into lng/lat.
@@ -153,7 +156,12 @@ pub struct TileCoverage {
 }
 
 /// Compute which tiles cover a viewport centred on `center_world`.
-pub fn tile_coverage(center_world: (f64, f64), zoom: f64, size: (f32, f32), overscan: u32) -> TileCoverage {
+pub fn tile_coverage(
+    center_world: (f64, f64),
+    zoom: f64,
+    size: (f32, f32),
+    overscan: u32,
+) -> TileCoverage {
     let z = tile_zoom(zoom);
     let n = 2u64.pow(z as u32) as i64;
     let scale = TILE_SIZE * 2f64.powf(zoom - z as f64); // drawn size of one tile
@@ -178,7 +186,14 @@ pub fn tile_coverage(center_world: (f64, f64), zoom: f64, size: (f32, f32), over
             tiles.push(TileCoord::new(z, tx_u, ty_u));
         }
     }
-    TileCoverage { tiles, min_x, max_x, min_y, max_y, zoom: z }
+    TileCoverage {
+        tiles,
+        min_x,
+        max_x,
+        min_y,
+        max_y,
+        zoom: z,
+    }
 }
 
 #[cfg(test)]
@@ -230,11 +245,14 @@ mod tests {
         let t = TileCoord::new(3, 6, 4);
         assert!(t.is_valid());
         assert_eq!(t.parent(), Some(TileCoord::new(2, 3, 2)));
-        assert_eq!(t.ancestors(), vec![
-            TileCoord::new(2, 3, 2),
-            TileCoord::new(1, 1, 1),
-            TileCoord::new(0, 0, 0),
-        ]);
+        assert_eq!(
+            t.ancestors(),
+            vec![
+                TileCoord::new(2, 3, 2),
+                TileCoord::new(1, 1, 1),
+                TileCoord::new(0, 0, 0),
+            ]
+        );
         assert_eq!(TileCoord::new(0, 0, 0).parent(), None);
         assert!(!TileCoord::new(2, 4, 0).is_valid());
     }

@@ -15,7 +15,11 @@ pub struct GoogleMapsTarget {
 
 fn clean_text(value: Option<&str>) -> Option<String> {
     let cleaned = value?.split_whitespace().collect::<Vec<_>>().join(" ");
-    if cleaned.is_empty() { None } else { Some(cleaned) }
+    if cleaned.is_empty() {
+        None
+    } else {
+        Some(cleaned)
+    }
 }
 
 /// Six decimals is roughly 0.1 m, plenty for a marker pin. Trailing zeroes
@@ -46,7 +50,18 @@ fn encode_uri_component(input: &str) -> String {
     let mut out = String::new();
     for &b in input.as_bytes() {
         match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'!' | b'~' | b'*' | b'\'' | b'(' | b')' => {
+            b'A'..=b'Z'
+            | b'a'..=b'z'
+            | b'0'..=b'9'
+            | b'-'
+            | b'_'
+            | b'.'
+            | b'!'
+            | b'~'
+            | b'*'
+            | b'\''
+            | b'('
+            | b')' => {
                 out.push(b as char);
             }
             _ => out.push_str(&format!("%{:02X}", b)),
@@ -74,7 +89,11 @@ pub fn google_maps_url(target: &GoogleMapsTarget) -> Option<String> {
     if query.is_empty() {
         return None;
     }
-    Some(format!("{}&query={}", MAPS_SEARCH_URL, encode_uri_component(&query)))
+    Some(format!(
+        "{}&query={}",
+        MAPS_SEARCH_URL,
+        encode_uri_component(&query)
+    ))
 }
 
 #[cfg(test)]
@@ -86,36 +105,66 @@ mod tests {
         let url = google_maps_url(&GoogleMapsTarget {
             name: Some("Tampines ActiveSG Gym".into()),
             address: Some("1 Tampines Walk, Singapore 528523".into()),
-            lat: Some(1.3531), lng: Some(103.9404), region: None,
-        }).unwrap();
-        assert_eq!(url, "https://www.google.com/maps/search/?api=1&query=Tampines%20ActiveSG%20Gym%2C%201%20Tampines%20Walk%2C%20Singapore%20528523");
+            lat: Some(1.3531),
+            lng: Some(103.9404),
+            region: None,
+        })
+        .unwrap();
+        assert_eq!(
+            url,
+            "https://www.google.com/maps/search/?api=1&query=Tampines%20ActiveSG%20Gym%2C%201%20Tampines%20Walk%2C%20Singapore%20528523"
+        );
         let url = google_maps_url(&GoogleMapsTarget {
             name: Some("Ya Kun Kaya Toast @ Marina Bay Link Mall".into()),
             address: Some("8A Marina Boulevard #B2-52, Singapore 018984".into()),
-            lat: None, lng: None, region: None,
-        }).unwrap();
+            lat: None,
+            lng: None,
+            region: None,
+        })
+        .unwrap();
         assert!(url.contains("%40") && url.contains("%23B2-52"));
     }
 
     #[test]
     fn falls_back_to_coords_or_name_region() {
         let url = google_maps_url(&GoogleMapsTarget {
-            name: Some("24/7 Fitness".into()), address: Some("   ".into()),
-            lat: Some(1.36134), lng: Some(103.84155), region: None,
-        }).unwrap();
+            name: Some("24/7 Fitness".into()),
+            address: Some("   ".into()),
+            lat: Some(1.36134),
+            lng: Some(103.84155),
+            region: None,
+        })
+        .unwrap();
         assert!(url.ends_with("1.36134%2C103.84155"));
         let url = google_maps_url(&GoogleMapsTarget {
-            name: Some("Adam Park".into()), lat: None, lng: None, ..Default::default()
-        }).unwrap();
+            name: Some("Adam Park".into()),
+            lat: None,
+            lng: None,
+            ..Default::default()
+        })
+        .unwrap();
         assert!(url.ends_with("Adam%20Park%2C%20Singapore"));
         assert!(google_maps_url(&GoogleMapsTarget::default()).is_none());
-        assert!(google_maps_url(&GoogleMapsTarget { lat: Some(f64::NAN), lng: Some(103.8), ..Default::default() }).is_none());
+        assert!(
+            google_maps_url(&GoogleMapsTarget {
+                lat: Some(f64::NAN),
+                lng: Some(103.8),
+                ..Default::default()
+            })
+            .is_none()
+        );
     }
 
     #[test]
     fn format_coordinates_rounds_and_rejects() {
-        assert_eq!(format_coordinates(Some(1.3500004), Some(103.9400001)).unwrap(), "1.35,103.94");
-        assert_eq!(format_coordinates(Some(1.23456789), Some(103.98765432)).unwrap(), "1.234568,103.987654");
+        assert_eq!(
+            format_coordinates(Some(1.3500004), Some(103.9400001)).unwrap(),
+            "1.35,103.94"
+        );
+        assert_eq!(
+            format_coordinates(Some(1.23456789), Some(103.98765432)).unwrap(),
+            "1.234568,103.987654"
+        );
         assert!(format_coordinates(None, Some(103.8)).is_none());
         assert!(format_coordinates(Some(-91.0), Some(103.8)).is_none());
     }

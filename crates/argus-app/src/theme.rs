@@ -24,7 +24,12 @@ pub const LINE_STRONG: Color = rgb(0.361, 0.361, 0.361);
 pub const INK: Color = rgb(0.957, 0.957, 0.957);
 pub const MUTED: Color = rgb(0.655, 0.655, 0.655);
 pub const FAINT: Color = rgb(0.475, 0.475, 0.475);
-pub const OVERLAY: Color = Color { r: 0.031, g: 0.031, b: 0.031, a: 0.88 };
+pub const OVERLAY: Color = Color {
+    r: 0.031,
+    g: 0.031,
+    b: 0.031,
+    a: 0.88,
+};
 
 // Semantics.
 pub const SUCCESS: Color = rgb(0.33, 0.84, 0.55);
@@ -39,7 +44,12 @@ pub const BUS: Color = rgb(0.50, 0.94, 0.68);
 // Map palette (the basemap is Esri dark grey; overlays are brighter).
 pub const MAP_BG: Color = rgb(0.055, 0.065, 0.070);
 #[allow(dead_code)]
-pub const MAP_GRID: Color = Color { r: 0.35, g: 0.38, b: 0.40, a: 0.35 };
+pub const MAP_GRID: Color = Color {
+    r: 0.35,
+    g: 0.38,
+    b: 0.40,
+    a: 0.35,
+};
 
 // Text styles. The TS app uses 9–14px mono/sans with wide uppercase tracking.
 pub const MICRO: TextStyle = TextStyle::new(9.0, 500.0).tracking(0.9);
@@ -86,7 +96,10 @@ pub fn hex_color(hex: &str) -> Color {
         return INK;
     }
     let chan = |a: usize, b: usize| {
-        u8::from_str_radix(&h[a..b], 16).ok().map(|v| v as f32 / 255.0).unwrap_or(1.0)
+        u8::from_str_radix(&h[a..b], 16)
+            .ok()
+            .map(|v| v as f32 / 255.0)
+            .unwrap_or(1.0)
     };
     rgb(chan(0, 2), chan(2, 4), chan(4, 6))
 }

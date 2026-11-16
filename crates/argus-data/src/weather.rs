@@ -11,9 +11,7 @@ use argus_core::{
         DataGovForecastResponse, DataGovFourDayResponse, DataGovPsiResponse,
         DataGovStationReadingsResponse, DataGovUvResponse, RegionalReading,
     },
-    types::{
-        RegionalAirReadings, UvStatus, WeatherData, WeatherForecastDay,
-    },
+    types::{RegionalAirReadings, UvStatus, WeatherData, WeatherForecastDay},
 };
 use serde::de::DeserializeOwned;
 
@@ -80,9 +78,8 @@ fn average(values: impl IntoIterator<Item = f64>) -> Option<f64> {
 }
 
 fn regional(reading: Option<&RegionalReading>) -> RegionalAirReadings {
-    let get = |f: fn(&RegionalReading) -> Option<f64>| {
-        reading.and_then(f).filter(|v| v.is_finite())
-    };
+    let get =
+        |f: fn(&RegionalReading) -> Option<f64>| reading.and_then(f).filter(|v| v.is_finite());
     RegionalAirReadings {
         north: get(|r| r.north),
         south: get(|r| r.south),
@@ -154,8 +151,7 @@ pub fn assemble_weather(
     let psi_raw = psi_item
         .and_then(|i| i.readings.as_ref())
         .and_then(|r| r.psi_twenty_four_hourly.as_ref());
-    let pm25_item = pm25
-        .and_then(|p| p.data.items.first());
+    let pm25_item = pm25.and_then(|p| p.data.items.first());
     let pm25_raw = pm25_item.and_then(|i| i.readings.pm25_one_hourly.as_ref());
     let psi_regions = regional(psi_raw);
     let pm25_regions = regional(pm25_raw);
@@ -196,19 +192,41 @@ pub fn assemble_weather(
     let humid_values = readings(humidity);
 
     let timestamps: Vec<Option<&str>> = vec![
-        forecast.and_then(|f| f.items.as_ref()).and_then(|i| i.first()).and_then(|i| i.timestamps.update_timestamp.as_deref()),
-        forecast.and_then(|f| f.items.as_ref()).and_then(|i| i.first()).and_then(|i| i.timestamps.timestamp.as_deref()),
+        forecast
+            .and_then(|f| f.items.as_ref())
+            .and_then(|i| i.first())
+            .and_then(|i| i.timestamps.update_timestamp.as_deref()),
+        forecast
+            .and_then(|f| f.items.as_ref())
+            .and_then(|i| i.first())
+            .and_then(|i| i.timestamps.timestamp.as_deref()),
         psi_item.and_then(|i| i.timestamps.update_timestamp.as_deref()),
         psi_item.and_then(|i| i.timestamps.timestamp.as_deref()),
-        temperature.and_then(|r| r.items.as_ref()).and_then(|i| i.first()).and_then(|i| i.timestamps.update_timestamp.as_deref()),
-        temperature.and_then(|r| r.items.as_ref()).and_then(|i| i.first()).and_then(|i| i.timestamps.timestamp.as_deref()),
-        humidity.and_then(|r| r.items.as_ref()).and_then(|i| i.first()).and_then(|i| i.timestamps.update_timestamp.as_deref()),
-        humidity.and_then(|r| r.items.as_ref()).and_then(|i| i.first()).and_then(|i| i.timestamps.timestamp.as_deref()),
-        uv.and_then(|r| r.data.records.first()).map(|r| r.updated_timestamp.as_str()),
-        uv.and_then(|r| r.data.records.first()).map(|r| r.timestamp.as_str()),
+        temperature
+            .and_then(|r| r.items.as_ref())
+            .and_then(|i| i.first())
+            .and_then(|i| i.timestamps.update_timestamp.as_deref()),
+        temperature
+            .and_then(|r| r.items.as_ref())
+            .and_then(|i| i.first())
+            .and_then(|i| i.timestamps.timestamp.as_deref()),
+        humidity
+            .and_then(|r| r.items.as_ref())
+            .and_then(|i| i.first())
+            .and_then(|i| i.timestamps.update_timestamp.as_deref()),
+        humidity
+            .and_then(|r| r.items.as_ref())
+            .and_then(|i| i.first())
+            .and_then(|i| i.timestamps.timestamp.as_deref()),
+        uv.and_then(|r| r.data.records.first())
+            .map(|r| r.updated_timestamp.as_str()),
+        uv.and_then(|r| r.data.records.first())
+            .map(|r| r.timestamp.as_str()),
         pm25_item.and_then(|i| i.updated_timestamp.as_deref()),
         pm25_item.and_then(|i| i.timestamp.as_deref()),
-        four_day.and_then(|f| f.data.records.first()).map(|r| r.timestamp.as_str()),
+        four_day
+            .and_then(|f| f.data.records.first())
+            .map(|r| r.timestamp.as_str()),
     ];
 
     let data = WeatherData {
@@ -242,54 +260,92 @@ impl Client {
     }
 
     pub fn get_weather(&self) -> Result<WeatherData> {
-        let result = self.cache.get_with(
-            "weather",
-            WEATHER_TTL,
-            |(_, partial): &(WeatherData, bool)| if *partial { WEATHER_PARTIAL_TTL } else { WEATHER_TTL },
-            || {
-                // Feeds fail independently; fetch them in parallel on scoped
-                // worker threads (synchronous so Rune Latest closures fit).
-                let (forecast, psi, temp, humidity, uv, pm25, four_day) =
-                    std::thread::scope(|scope| {
-                        let f = scope.spawn(|| self.data_gov_get(DATA_GOV_BASE_URL, "/2-hour-weather-forecast"));
-                        let p = scope.spawn(|| self.data_gov_get::<DataGovPsiResponse>(DATA_GOV_BASE_URL, "/psi"));
-                        let t = scope.spawn(|| self.data_gov_get::<DataGovStationReadingsResponse>(DATA_GOV_BASE_URL, "/air-temperature"));
-                        let h = scope.spawn(|| self.data_gov_get::<DataGovStationReadingsResponse>(DATA_GOV_BASE_URL, "/relative-humidity"));
-                        let u = scope.spawn(|| self.data_gov_get::<DataGovUvResponse>(DATA_GOV_V2_BASE_URL, "/uv"));
-                        let m = scope.spawn(|| self.data_gov_get::<argus_core::api_types::DataGovPm25Response>(DATA_GOV_V2_BASE_URL, "/pm25"));
-                        let d = scope.spawn(|| self.data_gov_get::<DataGovFourDayResponse>(DATA_GOV_V2_BASE_URL, "/four-day-outlook"));
-                        (
-                            f.join().unwrap_or(None),
-                            p.join().unwrap_or(None),
-                            t.join().unwrap_or(None),
-                            h.join().unwrap_or(None),
-                            u.join().unwrap_or(None),
-                            m.join().unwrap_or(None),
-                            d.join().unwrap_or(None),
-                        )
-                    });
-                if forecast.is_none()
-                    && psi.is_none()
-                    && temp.is_none()
-                    && humidity.is_none()
-                    && uv.is_none()
-                    && pm25.is_none()
-                    && four_day.is_none()
-                {
-                    return Err(Error::external("data.gov.sg", 502, "All weather endpoints failed"));
-                }
-                Ok(assemble_weather(
-                    forecast.as_ref(),
-                    psi.as_ref(),
-                    temp.as_ref(),
-                    humidity.as_ref(),
-                    uv.as_ref(),
-                    pm25.as_ref(),
-                    four_day.as_ref(),
-                ))
-            },
-        )
-        .map(|(data, _)| data);
+        let result = self
+            .cache
+            .get_with(
+                "weather",
+                WEATHER_TTL,
+                |(_, partial): &(WeatherData, bool)| {
+                    if *partial {
+                        WEATHER_PARTIAL_TTL
+                    } else {
+                        WEATHER_TTL
+                    }
+                },
+                || {
+                    // Feeds fail independently; fetch them in parallel on scoped
+                    // worker threads (synchronous so Rune Latest closures fit).
+                    let (forecast, psi, temp, humidity, uv, pm25, four_day) =
+                        std::thread::scope(|scope| {
+                            let f = scope.spawn(|| {
+                                self.data_gov_get(DATA_GOV_BASE_URL, "/2-hour-weather-forecast")
+                            });
+                            let p = scope.spawn(|| {
+                                self.data_gov_get::<DataGovPsiResponse>(DATA_GOV_BASE_URL, "/psi")
+                            });
+                            let t = scope.spawn(|| {
+                                self.data_gov_get::<DataGovStationReadingsResponse>(
+                                    DATA_GOV_BASE_URL,
+                                    "/air-temperature",
+                                )
+                            });
+                            let h = scope.spawn(|| {
+                                self.data_gov_get::<DataGovStationReadingsResponse>(
+                                    DATA_GOV_BASE_URL,
+                                    "/relative-humidity",
+                                )
+                            });
+                            let u = scope.spawn(|| {
+                                self.data_gov_get::<DataGovUvResponse>(DATA_GOV_V2_BASE_URL, "/uv")
+                            });
+                            let m = scope.spawn(|| {
+                                self.data_gov_get::<argus_core::api_types::DataGovPm25Response>(
+                                    DATA_GOV_V2_BASE_URL,
+                                    "/pm25",
+                                )
+                            });
+                            let d = scope.spawn(|| {
+                                self.data_gov_get::<DataGovFourDayResponse>(
+                                    DATA_GOV_V2_BASE_URL,
+                                    "/four-day-outlook",
+                                )
+                            });
+                            (
+                                f.join().unwrap_or(None),
+                                p.join().unwrap_or(None),
+                                t.join().unwrap_or(None),
+                                h.join().unwrap_or(None),
+                                u.join().unwrap_or(None),
+                                m.join().unwrap_or(None),
+                                d.join().unwrap_or(None),
+                            )
+                        });
+                    if forecast.is_none()
+                        && psi.is_none()
+                        && temp.is_none()
+                        && humidity.is_none()
+                        && uv.is_none()
+                        && pm25.is_none()
+                        && four_day.is_none()
+                    {
+                        return Err(Error::external(
+                            "data.gov.sg",
+                            502,
+                            "All weather endpoints failed",
+                        ));
+                    }
+                    Ok(assemble_weather(
+                        forecast.as_ref(),
+                        psi.as_ref(),
+                        temp.as_ref(),
+                        humidity.as_ref(),
+                        uv.as_ref(),
+                        pm25.as_ref(),
+                        four_day.as_ref(),
+                    ))
+                },
+            )
+            .map(|(data, _)| data);
         self.finish(Source::Weather, result)
     }
 }
@@ -298,9 +354,9 @@ impl Client {
 mod tests {
     use super::*;
     use argus_core::api_types::{
-        DataGovTimestamps, DataGovUvResponse, ForecastText, ForecastTemperature,
-        FourDayForecast, FourDayRecord, Pm25Data, Pm25Item, Pm25Readings, PsiReadingItem, PsiReadings,
-        UvData, UvHour, UvRecord, ValueReading,
+        DataGovTimestamps, DataGovUvResponse, ForecastTemperature, ForecastText, FourDayForecast,
+        FourDayRecord, Pm25Data, Pm25Item, Pm25Readings, PsiReadingItem, PsiReadings, UvData,
+        UvHour, UvRecord, ValueReading,
     };
     use argus_core::types::{Pm25Band, PsiStatus};
 
@@ -322,12 +378,18 @@ mod tests {
                     UvRecord {
                         updated_timestamp: "2026-01-02T18:00:00Z".into(),
                         timestamp: "2026-01-02T18:00:00Z".into(),
-                        index: vec![UvHour { hour: "2026-01-02T18:00:00Z".into(), value: 7.0 }],
+                        index: vec![UvHour {
+                            hour: "2026-01-02T18:00:00Z".into(),
+                            value: 7.0,
+                        }],
                     },
                     UvRecord {
                         updated_timestamp: "2026-01-01T18:00:00Z".into(),
                         timestamp: "2026-01-01T18:00:00Z".into(),
-                        index: vec![UvHour { hour: "2026-01-01T18:00:00Z".into(), value: 5.0 }],
+                        index: vec![UvHour {
+                            hour: "2026-01-01T18:00:00Z".into(),
+                            value: 5.0,
+                        }],
                     },
                 ],
             },
@@ -359,14 +421,19 @@ mod tests {
                     updated_timestamp: None,
                     readings: Pm25Readings {
                         pm25_one_hourly: Some(RegionalReading {
-                            north: Some(88.0), south: Some(173.0), east: Some(160.0),
-                            west: Some(195.0), central: None, national: None,
+                            north: Some(88.0),
+                            south: Some(173.0),
+                            east: Some(160.0),
+                            west: Some(195.0),
+                            central: None,
+                            national: None,
                         }),
                     },
                 }],
             },
         };
-        let (data, partial) = assemble_weather(None, Some(&psi), None, None, None, Some(&pm25), None);
+        let (data, partial) =
+            assemble_weather(None, Some(&psi), None, None, None, Some(&pm25), None);
         assert!(partial);
         assert_eq!(data.psi, Some(146.0));
         assert_eq!(data.psi_status, PsiStatus::Unhealthy);
@@ -384,18 +451,28 @@ mod tests {
                 .map(|i| FourDayForecast {
                     day: format!("Day {i}"),
                     timestamp: format!("2026-01-0{}T00:00:00Z", i + 1),
-                    forecast: ForecastText { text: "Cloudy".into() },
-                    temperature: ForecastTemperature { low: 25.0, high: 32.0 },
+                    forecast: ForecastText {
+                        text: "Cloudy".into(),
+                    },
+                    temperature: ForecastTemperature {
+                        low: 25.0,
+                        high: 32.0,
+                    },
                 })
                 .collect(),
         };
         let four = DataGovFourDayResponse {
-            data: argus_core::api_types::FourDayData { records: vec![record] },
+            data: argus_core::api_types::FourDayData {
+                records: vec![record],
+            },
         };
         let temp = DataGovStationReadingsResponse {
             items: Some(vec![argus_core::api_types::StationReadingsItem {
                 timestamps: DataGovTimestamps::default(),
-                readings: Some(vec![ValueReading { value: 28.0 }, ValueReading { value: 30.0 }]),
+                readings: Some(vec![
+                    ValueReading { value: 28.0 },
+                    ValueReading { value: 30.0 },
+                ]),
             }]),
         };
         let (data, _) = assemble_weather(None, None, Some(&temp), None, None, None, Some(&four));
