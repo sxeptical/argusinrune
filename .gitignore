@@ -44,6 +44,9 @@ yarn-error.log*
 .opencode
 .claude
 /tmp/
+# rust / cargo
+/target
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
