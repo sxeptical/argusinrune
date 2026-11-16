@@ -259,7 +259,7 @@ fn flights_panel(s: &AppState) -> El {
                 .child(text(crate::panels::dialogs::direction_label(flight.direction)).font(MICRO)
                     .color(match flight.direction { argus_core::types::FlightDirection::Inbound => SUCCESS,
                         argus_core::types::FlightDirection::Outbound => DANGER, _ => INFO }).w(52.0))
-                .child(text(format!("{}ft", argus_core::format::format_altitude_feet(flight.altitude)))
+                .child(text(argus_core::format::format_altitude_feet(flight.altitude))
                     .font(MICRO).color(MUTED).truncate()),
         );
     }

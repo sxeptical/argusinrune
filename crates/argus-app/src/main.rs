@@ -11,6 +11,7 @@
 //! ```
 
 mod fixtures;
+mod images;
 mod live;
 mod msg;
 mod overlays;
@@ -66,15 +67,22 @@ fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
 
 fn setup(s: &mut AppState, waker: rune::Waker) {
     s.data.setup(waker.clone());
-    s.map.setup(waker);
+    s.map.setup(waker.clone());
+    s.images.setup(waker);
     // Headless renders a single frame; preload basemap tiles synchronously so
-    // the snap shows the real map instead of empty tile slots. The `live`
-    // scene additionally preloads all feeds through argus-data's TTL cache.
+    // the snap shows the real map instead of empty tile slots. The `live` /
+    // `cameras` scenes additionally preload feeds and images synchronously.
     if rune::is_headless() {
         s.map.preload_sync();
         if s.preload_feeds {
             s.data.preload_sync();
             s.recompute();
+        }
+        if s.preload_images {
+            let (photos, cameras) = s.image_urls();
+            let mut all = photos;
+            all.extend(cameras);
+            s.images.preload_sync(&all);
         }
     }
 }
@@ -95,6 +103,12 @@ fn poll(s: &mut AppState, now: f64, tx: &mut Tx) -> bool {
 
     changed |= s.data.poll(now, tx);
     changed |= s.map.poll();
+
+    // Camera frames refresh with the camera feed (presigned URLs can stay the
+    // same while the JPEG changes); place photos are fetched once per URL.
+    let (photos, cameras) = s.image_urls();
+    changed |= s.images.update(now, &photos, &cameras);
+    changed |= s.images.poll(now);
     for msg in s.map.drain_messages() {
         match msg {
             argus_map::MapMsg::OverlayClicked(id) => dispatch(s, Msg::MapClick(id)),
@@ -148,6 +162,7 @@ fn main() {
             ("poi-dialog", state::scene_poi_dialog),
             ("panels", state::scene_panels),
             ("live", state::scene_live),
+            ("cameras", state::scene_cameras),
             ("loading", |s| { s.collapsed_groups.insert("boot/loading".into()); }),
         ],
         setup: Some(setup),

@@ -14,6 +14,7 @@ use argus_core::types::{AmenityType, LngLat, MapSearchResult, ParkFeatureKind};
 use argus_map::{MapState, Overlays, OverlayId, DEFAULT_CENTER, DEFAULT_ZOOM};
 use rune::TextEdit;
 
+use crate::images::ImageStore;
 use crate::live::{
     def, load_prefs, parse_center, parse_notifications, parse_radius, parse_station,
     parse_visibility, DataSource, FeedKind, LiveDataSource, OnDemand, SourceStatus,
@@ -111,6 +112,8 @@ impl Default for FeedbackState {
 pub struct AppState {
     /// Feed snapshots + background polling. Panels only read this boundary.
     pub data: Box<dyn DataSource>,
+    /// Decoded camera frames and place photos (Rune `ImageCache` handles).
+    pub images: ImageStore,
     pub static_data: Option<StaticData>,
     pub registry: Option<AmenityRegistry>,
 
@@ -175,8 +178,10 @@ pub struct AppState {
     // Preferences persistence.
     pub prefs_dirty: bool,
     pub last_pref_save: f64,
-    /// Set by the `live` scene: fetch every feed synchronously in `setup`.
+    /// Set by the `live` / `cameras` scenes: fetch every feed synchronously in `setup`.
     pub preload_feeds: bool,
+    /// Set by image-heavy scenes: fetch + decode their images in `setup`.
+    pub preload_images: bool,
 }
 
 impl std::fmt::Debug for AppState {
@@ -216,8 +221,17 @@ pub fn init() -> AppState {
         map.camera.center = argus_map::LngLat::new(center[0], center[1]);
     }
 
+    // One configured client serves both the feed `Latest`s and the image
+    // byte fetches; keys stay inside argus-data and never reach the UI.
+    let client = std::sync::Arc::new(argus_data::Client::new());
+    let mut data = LiveDataSource::new();
+    data.install_live_fetchers(std::sync::Arc::clone(&client));
+    let mut images = ImageStore::new();
+    images.set_client(client);
+
     let mut s = AppState {
-        data: Box::new(LiveDataSource::new()),
+        data: Box::new(data),
+        images,
         static_data,
         registry,
         visibility,
@@ -263,12 +277,10 @@ pub fn init() -> AppState {
         prefs_dirty: false,
         last_pref_save: 0.0,
         preload_feeds: false,
+        preload_images: false,
     };
-    // Real feeds. `.env` / config.toml are loaded by argus-data::Client::new;
-    // keys never reach the UI or the snapshot.
-    let mut data = LiveDataSource::new();
-    data.install_live_fetchers(std::sync::Arc::new(argus_data::Client::new()));
-    s.data = Box::new(data);
+    // Real feeds are installed above. `.env` / config.toml are loaded by
+    // argus-data::Client::new; keys never reach the UI or the snapshot.
     s.recompute();
     s.clock_time = sg_clock();
     s.recompute();
@@ -295,6 +307,45 @@ impl AppState {
             carparks: self.visibility.get("carparks").copied().unwrap_or(false),
             ev: self.visibility.get("evChargers").copied().unwrap_or(false),
         }
+    }
+
+    /// Photo URLs for the current selection (amenity place photos or park
+    /// photos from the static bundles). The gallery fetches these once and
+    /// reuses the decoded handles.
+    pub fn photo_urls(&self) -> Vec<String> {
+        match &self.selection {
+            Some(Selection::Amenity { kind, id }) => self
+                .registry
+                .as_ref()
+                .and_then(|r| r.find(*kind, id))
+                .map(|(_, place)| place.photos().iter().map(|p| p.thumb.clone()).collect())
+                .unwrap_or_default(),
+            Some(Selection::Park { name, .. }) => self
+                .static_data
+                .as_ref()
+                .map(|d| {
+                    argus_core::data::photos_for_park(d, name)
+                        .iter()
+                        .map(|p| p.thumb.clone())
+                        .collect()
+                })
+                .unwrap_or_default(),
+            _ => Vec::new(),
+        }
+    }
+
+    /// Everything the image pipeline needs: stable photo URLs and the current
+    /// camera frame URLs (which must be re-fetched whenever the feed refreshes).
+    pub fn image_urls(&self) -> (Vec<String>, Vec<String>) {
+        let cameras = self
+            .data
+            .snapshot()
+            .cameras
+            .iter()
+            .map(|c| c.image_link.clone())
+            .filter(|url| !url.is_empty())
+            .collect();
+        (self.photo_urls(), cameras)
     }
 
     /// Recompute everything the view reads from derived state. Called by the
@@ -418,13 +469,30 @@ pub fn scene_poi_dialog(s: &mut AppState) {
     s.recompute();
 }
 
+/// Install a real client on both the feed boundary and the image pipeline.
+fn install_live_client(s: &mut AppState) {
+    let client = std::sync::Arc::new(argus_data::Client::new());
+    let mut data = LiveDataSource::new();
+    data.install_live_fetchers(std::sync::Arc::clone(&client));
+    s.data = Box::new(data);
+    s.images.set_client(client);
+}
+
 /// Real-network scene: one synchronous preload in `setup` so the single
 /// headless frame contains live data (mirrors argus-map's `preload_sync`).
 pub fn scene_live(s: &mut AppState) {
-    let mut data = LiveDataSource::new();
-    data.install_live_fetchers(std::sync::Arc::new(argus_data::Client::new()));
-    s.data = Box::new(data);
+    install_live_client(s);
     s.preload_feeds = true;
+    s.recompute();
+}
+
+/// Real-decoded road-camera scene: preload the live LTA feed and its images
+/// synchronously in `setup` so the headless frame shows actual JPEG frames.
+pub fn scene_cameras(s: &mut AppState) {
+    install_live_client(s);
+    s.visibility.insert("cameras".into(), true);
+    s.preload_feeds = true;
+    s.preload_images = true;
     s.recompute();
 }
 

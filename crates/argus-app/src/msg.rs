@@ -6,6 +6,7 @@ use argus_core::layers::{all_layer_options_on, toggle_layer_option_selection};
 use argus_core::types::{AmenityType, LngLat};
 use argus_map::OverlayId;
 
+use crate::live::FeedKind;
 use crate::state::{
     AirWindow, AppState, MrtPickTarget, Selection, Target,
 };
@@ -38,6 +39,8 @@ pub enum Msg {
     SelectSearchResult(String),
     SelectCamera(String),
     CloseCamera,
+    /// Re-fetch the LTA camera feed and its frames on demand.
+    RefreshCameraImages,
     ToggleBell,
     ToggleNotificationRail,
     ToggleNotificationRoad,
@@ -181,6 +184,20 @@ pub fn dispatch(s: &mut AppState, msg: Msg) {
         }
         Msg::SelectCamera(id) => s.camera_dialog = Some(id),
         Msg::CloseCamera => s.camera_dialog = None,
+        Msg::RefreshCameraImages => {
+            // The camera feed is the source of truth: a refresh pulls fresh
+            // presigned frame URLs, then the image store re-fetches the bytes.
+            s.data.request(FeedKind::Cameras);
+            let cameras: Vec<String> = s
+                .data
+                .snapshot()
+                .cameras
+                .iter()
+                .map(|c| c.image_link.clone())
+                .filter(|url| !url.is_empty())
+                .collect();
+            s.images.update(s.now, &[], &cameras);
+        }
         Msg::ToggleBell => {
             s.bell_open = !s.bell_open;
         }

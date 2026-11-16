@@ -1,7 +1,7 @@
 //! News and traffic-camera panels.
 
 use argus_core::format::format_sg_date_time;
-use rune::{Color, Cx, El, LineCap, Shape, canvas, col, el, row, text};
+use rune::{Color, Cx, El, LineCap, Shape, SurfaceFit, canvas, col, el, row, text};
 
 use crate::msg::{Msg, dispatch};
 use crate::panels::common::*;
@@ -57,10 +57,19 @@ pub fn cameras_panel(s: &AppState, _: &mut Cx<AppState>) -> El {
         let mut r = row().key(format!("cameras/row/{row_i}")).w_full().min_h(0.0).gap(6.0);
         for cam in pair {
             let msg = Msg::SelectCamera(cam.camera_id.clone());
+            let img_key = format!("camera/{}/img", cam.camera_id);
+            // Real LTA frames are decoded by argus-app's ImageStore; until a
+            // frame lands (or on a failed fetch) keep the schematic thumbnail.
+            let mut img = el().key(&img_key).w_full().h(44.0).fill(PAPER);
+            if let Some(image) = s.images.image(&cam.image_link) {
+                img = img.pixels_fit(image.pixels(), SurfaceFit::Fill);
+            } else {
+                img = img.child(canvas(thumb.clone()).w_full().h(44.0));
+            }
             r = r.child(
                 col().key(format!("camera/{}", cam.camera_id)).w_full().min_w(0.0).gap(2.0)
                     .fill(SURFACE_RAISED).border(1.0, LINE).on_press(move |s: &mut AppState| dispatch(s, msg.clone()))
-                    .child(canvas(thumb.clone()).key(format!("camera/{}/img", cam.camera_id)).w_full().h(44.0).fill(PAPER))
+                    .child(img)
                     .child(text(&cam.location).font(MICRO).color(MUTED).truncate().padding(4.0)),
             );
         }

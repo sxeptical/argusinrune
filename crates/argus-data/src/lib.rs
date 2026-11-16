@@ -24,6 +24,7 @@ pub mod feedback;
 pub mod flights;
 pub mod health;
 pub mod http;
+pub mod images;
 pub mod lta;
 pub mod news;
 pub mod time;

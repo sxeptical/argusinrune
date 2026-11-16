@@ -178,6 +178,38 @@ impl HttpClient {
         })
     }
 
+    /// GET an opaque byte body with a hard cap (images decoded by Rune's
+    /// `ImageCache`). The cap is enforced by the transport as well as here, so
+    /// a hostile upstream cannot stream an unbounded response into the UI.
+    pub fn get_bytes_limited(
+        &self,
+        service: &str,
+        url: impl Into<String>,
+        headers: &[(&str, &str)],
+        timeout_ms: u64,
+        max_bytes: usize,
+    ) -> Result<Vec<u8>> {
+        let request = HttpRequest {
+            url: url.into(),
+            headers: headers
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
+            timeout_ms,
+            max_bytes: Some(max_bytes),
+        };
+        let response = self.transport.get(&request)?;
+        self.check_status(service, response.status)?;
+        if response.body.len() > max_bytes {
+            return Err(Error::external(
+                service,
+                502,
+                format!("{service} image exceeded {max_bytes} bytes"),
+            ));
+        }
+        Ok(response.body)
+    }
+
     /// GET a text body with a hard byte cap (RSS feeds).
     pub fn get_text_limited(
         &self,

@@ -195,13 +195,21 @@ fn search_dialog(s: &AppState) -> El {
 fn camera_dialog(s: &AppState) -> Option<El> {
     let id = s.camera_dialog.as_ref()?;
     let cam = s.data.snapshot().cameras.iter().find(|c| &c.camera_id == id)?.clone();
-    let card = modal_card("camera/card", 340.0, 200.0, 760.0, 500.0)
+    let mut preview = el().key("camera/frame").w_full().grow(1.0).min_h(0.0).fill(PAPER);
+    if let Some(image) = s.images.image(&cam.image_link) {
+        preview = preview.pixels_fit(image.pixels(), rune::SurfaceFit::Fill);
+    } else {
+        preview = preview.child(hint("Waiting for camera frame…"));
+    }
+    let card = modal_card("camera/card", 340.0, 130.0, 760.0, 620.0)
         .child(dialog_header(&cam.location, "TRAFFIC CAMERA", Msg::CloseCamera))
-        .child(col().key("camera/preview").w_full().grow(1.0).min_h(0.0).fill(PAPER).padding(12.0)
-            .child(hint("Camera image URL is supplied by the LTA feed. Image rendering is not wired yet."))
-            .child(row().key("camera/links").gap(6.0)
+        .child(col().key("camera/preview").w_full().grow(1.0).min_h(0.0).padding(12.0).gap(8.0)
+            .child(preview)
+            .child(row().key("camera/links").gap(6.0).center_y()
                 .child(text(format!("{:.5} N, {:.5} E", cam.latitude, cam.longitude)).font(TINY_MONO).color(INFO))
+                .child(text("© LTA").font(MICRO).color(FAINT))
                 .child(el().grow(1.0))
+                .child(press("camera/refresh", "REFRESH", Msg::RefreshCameraImages, false))
                 .child(press("camera/close", "CLOSE", Msg::CloseCamera, false))));
     Some(modal_backdrop("camera/backdrop", card))
 }
