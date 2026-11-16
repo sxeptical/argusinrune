@@ -490,3 +490,81 @@ used instead), concurrency in LTA page walks is sequential (skip order and
 short-page termination are preserved), no disk cache, the app must supply its
 own `Latest`/poll wiring (argus-data is deliberately UI-agnostic), and the
 Neon feedback path sends SQL but was not exercised against the live database.
+
+## argus-app structure (Phase 4)
+
+The full dashboard lives in `crates/argus-app`. `main.rs` only wires
+`AppSpec` (scenes, setup, poll) and composes the three regions; everything else
+is split by responsibility:
+
+| Module | Port of | Responsibility |
+| --- | --- | --- |
+| `theme.rs` | `app/globals.css` | Near-black paper/surface/line palette, semantic colours, type styles, `#rrggbb` helper |
+| `state.rs` | `use-dashboard-state`, `use-mrt-planner`, `use-persistent-state` | `AppState`, prefs load/save, derived recompute (overlays, search, signals, counts), scenes |
+| `msg.rs` | component callbacks | `Msg` enum + reducers: layers/sub-filters, geo filter, route planner, selection, toasts, feedback |
+| `live.rs` | `use-dashboard-sources` | `DataSource` boundary, `Latest`-per-feed polling, on-demand feeds, bus arrivals/routes, argus-data health |
+| `fixtures.rs` | — | Deterministic, clearly labelled fixture snapshot for goldens/tests (never live data) |
+| `overlays.rs` | `Map.tsx` source assembly | Domain → `argus-map` overlays (POIs, MRT lines/stations, parks, radius circle, route, selected marker) |
+| `search.rs` | `MapSearch.tsx`, `lib/map-search.ts` | Radius-scoped search index, ranking, hit → selection |
+| `panels/header.rs` | `DashboardHeader`, `NotificationBell` | Clock, source counter, status dot, alert bell/popover |
+| `panels/sidebar.rs` | `LayersSidebar`, `LayerControls`, `WeatherPanel`, `FlightPanel` | Layer groups + eye toggles + sub-filter chips, weather/air, flights |
+| `panels/map.rs` | `Map.tsx`, `MapSearch.tsx` | `map_view_for` host, search trigger, legend, geo-pick hint, attribution |
+| `panels/transit.rs` | `MrtRoutePanel`, `BusPanel` | Station pickers, swap/reset, route summary/segments, stop search, arrivals, route draw |
+| `panels/feeds.rs` | `NewsPanel`, `CameraPanel`, `TerminalPanel` | News items, camera thumbnails + preview dialog |
+| `panels/intel.rs` | `IntelPanel`, `GeoFilterPanel`, `NotificationToasts` | Signals, source-health bars, radius control, toasts |
+| `panels/dialogs.rs` | `FocusDialog`, `FeedbackWidget`, `LoadingScreen`, `DashboardFooter` | Focus/search/camera/feedback modals, footer, boot screen |
+| `tests.rs` | — | Eight reducer + Rune-runtime smoke tests |
+
+### Data wiring
+
+`init()` constructs one `argus_data::Client` (keys from `.env`/config, never
+rendered or logged) and `LiveDataSource::install_live_fetchers` installs a
+`Latest` closure per feed. Each closure calls the client's blocking method on a
+Rune worker thread; `poll` lands the answer on the UI thread and schedules the
+next wake at the SWR interval: bus stops 30m, cameras/incidents/carparks/train
+alerts 1m, EV/weather 5m, news 15m, flights 15s, bus arrivals 15s. Carparks and
+EV are only requested while their layer is on. Source health is copied from
+`Client::source_health()` (including `unconfigured`/`stale`) into the panel.
+Bus-route geometry and feedback submission are also Latest requests, so no HTTP
+runs in a handler. Preferences are flushed to `~/.config/argus/preferences.json`
+(override `ARGUS_CONFIG_DIR`) at most every 2 s via write-then-rename.
+
+### Scenes and snaps
+
+`--list-scenes` prints: `dashboard`, `layers-on`, `route-planner`, `poi-dialog`,
+`panels`, `live`, `loading`.
+
+- `docs/snaps/dashboard.png` — default view, unconfigured feeds
+- `docs/snaps/layers-on.png` — several static POI layers + 3 km radius circle
+- `docs/snaps/route-planner.png` — plan + white route overlay on the map
+- `docs/snaps/poi-dialog.png` — amenity focus dialog
+- `docs/snaps/panels.png` — all panels with deterministic fixture data
+- `docs/snaps/live.png` — **real network data** preloaded in `setup` (the
+  `live` scene calls `DataSource::preload_sync`, like argus-map's tile preload).
+  Verified 5,209 bus stops, 39 incidents, 2,127 carparks, 2,821 EV points,
+  20 news items, 8 cameras and live weather; no key material in the snap.
+- `docs/snaps/shell.png` — Phase 1 shell (kept for history)
+
+Snaps were rendered at `--scale 1 --theme dark`, inspected visually and checked
+with `--tree` JSON. Visual fixes applied after inspection: bounded/scrolling
+layer and weather panels, centred modal cards, no duplicate map chip, unique
+camera-row keys, toasts moved over the map so the right column stays readable.
+
+### Verification
+
+- `cargo build --workspace`: green, no warnings from `argus-app`.
+- `cargo test -p argus-app`: 8 passed, 0 failed (layer toggle, group toggle,
+  overlay click → focus dialog, MRT route flow, geo filter, search, sub-filter,
+  full Rune `Runtime` view smoke test).
+- `cargo run -p argus-app -- --snap docs/snaps/live.png --scene live`: real
+  feeds render in a single headless frame.
+
+### Remaining gaps
+
+Camera images are drawn as placeholders (image URLs are in the snapshot but
+not decoded), no photo gallery in the focus dialog, OneMap search is not wired
+into the search box (the static bundles + live bus stops cover the original
+index), and feedback's Neon insert is implemented by argus-data but was not
+exercised against a live database. The `loading` scene exists for structural
+checks; the desktop app renders the dashboard directly because feeds settle
+asynchronously rather than gating a single boot screen.
