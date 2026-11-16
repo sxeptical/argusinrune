@@ -25,7 +25,7 @@
  * official source (currently Punggol, which opened after the SportSG
  * dataset's last update).
  *
- * This is a separate script and output (`public/gyms.json`) from
+ * This is a separate script and output (`data/gyms.json`) from
  * `scripts/fetch-amenities.mjs`, following the parks pattern: rerunning it
  * never refetches hawker centres, malls, or their photos.
  *
@@ -466,8 +466,8 @@ const gyms = merged
 if (gyms.length < 300) throw new Error(`Gym sources returned only ${gyms.length} gyms`);
 
 const serialized = JSON.stringify(gyms);
-await mkdir("public", { recursive: true });
-await writeFile("public/gyms.json", serialized);
+await mkdir("data", { recursive: true });
+await writeFile("data/gyms.json", serialized);
 const brandCounts = Object.entries(
   gyms.reduce((counts, gym) => ({ ...counts, [gym.brand]: (counts[gym.brand] ?? 0) + 1 }), {}),
 ).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));

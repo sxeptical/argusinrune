@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * Authoring-time: apply scripts/data/photo-picks.json to the current static
- * bundles in public/ without refetching any source. The fetch scripts apply
+ * bundles in data/ without refetching any source. The fetch scripts apply
  * the same picks on every rebuild; run this after editing the picks file.
  */
 import { readFile, writeFile } from "node:fs/promises";
@@ -10,13 +10,13 @@ import { applyPhotoPicks } from "./lib/photo-picks.mjs";
 
 // layer → bundle file, plus the array within it for multi-layer bundles.
 const LAYERS = [
-  { layer: "hawkers", file: "public/amenities.json", key: "hawkers" },
-  { layer: "malls", file: "public/amenities.json", key: "malls" },
-  { layer: "community-clubs", file: "public/community-clubs.json" },
-  { layer: "healthcare", file: "public/healthcare.json" },
-  { layer: "heritage", file: "public/heritage.json", photoOptions: ARCHIVAL_PHOTO_OPTIONS },
-  { layer: "hotels", file: "public/hotels.json" },
-  { layer: "libraries", file: "public/libraries.json" },
+  { layer: "hawkers", file: "data/amenities.json", key: "hawkers" },
+  { layer: "malls", file: "data/amenities.json", key: "malls" },
+  { layer: "community-clubs", file: "data/community-clubs.json" },
+  { layer: "healthcare", file: "data/healthcare.json" },
+  { layer: "heritage", file: "data/heritage.json", photoOptions: ARCHIVAL_PHOTO_OPTIONS },
+  { layer: "hotels", file: "data/hotels.json" },
+  { layer: "libraries", file: "data/libraries.json" },
 ];
 
 const bundles = new Map();

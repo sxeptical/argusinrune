@@ -1,0 +1,9 @@
+{
+  "value": [
+    { "Cameras": [ { "CameraID": "A001", "Latitude": 1.3, "Longitude": 103.8, "ImageLink": "https://images.data.gov.sg/c1.jpg" } ] },
+    { "Cameras": [
+      { "CameraID": "B002", "Latitude": 1.31, "Longitude": 103.81, "ImageLink": "https://dm-traffic-camera-itsc.s3.ap-southeast-1.amazonaws.com/cam2.jpg" },
+      { "CameraID": "EVIL", "Latitude": 1.32, "Longitude": 103.82, "ImageLink": "https://evil.example/cam.jpg" }
+    ] }
+  ]
+}

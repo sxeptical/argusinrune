@@ -1,0 +1,31 @@
+# Argus — native desktop dashboard (Rune). See docs/ARCHITECTURE.md.
+[workspace]
+resolver = "3"
+members = [
+    "crates/argus-core",
+    "crates/argus-data",
+    "crates/argus-app",
+    "crates/argus-map",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+# Rune uses vendored crates that it declares in its own `[patch.crates-io]`.
+# Cargo does NOT inherit a dependency's patches, so an app that builds Rune
+# has to repeat them. Keep all of these revs in sync with `rune` below.
+# See crates/rune/README.md -> "Depending on Rune" and docs/ARCHITECTURE.md.
+[patch.crates-io]
+winit = { git = "https://github.com/anomalyco/rune", rev = "55ef5268f22038a95344b3e9d2b4a25ddba731b1" }
+parley_engine = { git = "https://github.com/anomalyco/rune", rev = "55ef5268f22038a95344b3e9d2b4a25ddba731b1" }
+wgpu-hal = { git = "https://github.com/anomalyco/rune", rev = "55ef5268f22038a95344b3e9d2b4a25ddba731b1" }
+accesskit_windows = { git = "https://github.com/anomalyco/rune", rev = "55ef5268f22038a95344b3e9d2b4a25ddba731b1" }
+accesskit_macos = { git = "https://github.com/anomalyco/rune", rev = "55ef5268f22038a95344b3e9d2b4a25ddba731b1" }
+
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false

@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * Authoring-time data pipeline (not run in CI or deployment). Builds the
- * static retail-pharmacy bundle (public/pharmacies.json) from HSA's "Retail
+ * static retail-pharmacy bundle (data/pharmacies.json) from HSA's "Retail
  * pharmacy locations (GEOJSON)" (data.gov.sg, Singapore Open Data Licence).
  *
  * This is a separate script and output from scripts/fetch-amenities.mjs,
@@ -65,8 +65,8 @@ pharmacies.sort((a, b) => a.name.localeCompare(b.name, "en-SG"));
 if (pharmacies.length < 200) throw new Error(`Pharmacy dataset returned only ${pharmacies.length} pharmacies`);
 
 const serialized = JSON.stringify(pharmacies);
-await mkdir("public", { recursive: true });
-await writeFile("public/pharmacies.json", serialized);
+await mkdir("data", { recursive: true });
+await writeFile("data/pharmacies.json", serialized);
 console.log(
   `Pharmacy bundle: ${pharmacies.length} pharmacies (${skipped.length} skipped${skipped.length ? `: ${skipped.join("; ")}` : ""}), ${Buffer.byteLength(serialized)} bytes`,
 );

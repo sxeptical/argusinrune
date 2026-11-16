@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * Authoring-time data pipeline (not run in CI or deployment). Builds the
- * static healthcare bundle (public/healthcare.json) from:
+ * static healthcare bundle (data/healthcare.json) from:
  *  - MOH CHAS Clinics (data.gov.sg, Singapore Open Data Licence): 1,193
  *    points, all attributes packed in the KML HTML `Description` (parsed
  *    with scripts/lib/kml-description.mjs). HCI_CODE is the unique id.
@@ -130,8 +130,8 @@ const { places: withPhotos, applied: pickedCount } = await applyPhotoPicks(
 const photoCount = withPhotos.filter((site) => site.photos.length).length;
 
 const serialized = JSON.stringify(withPhotos);
-await mkdir("public", { recursive: true });
-await writeFile("public/healthcare.json", serialized);
+await mkdir("data", { recursive: true });
+await writeFile("data/healthcare.json", serialized);
 console.log(
   `Healthcare bundle: ${sites.length} sites ` +
     `(${clinics.length} GP clinics, ${hospitals.places.length} hospitals, ${dentists.places.length} dental; ` +

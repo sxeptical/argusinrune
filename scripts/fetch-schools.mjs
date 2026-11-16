@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * Authoring-time data pipeline (not run in CI or deployment). Builds the
- * static MOE schools bundle (public/schools.json) from:
+ * static MOE schools bundle (data/schools.json) from:
  *  - MOE "General information of schools" (data.gov.sg, Singapore Open
  *    Data Licence): 337 rows, no coordinates. Only the whitelisted fields
  *    below are read; the principal/VP name columns are never read or
@@ -311,8 +311,8 @@ const kept = [...schools.filter((school) => school.lat !== null && school.lng !=
 kept.sort((a, b) => a.name.localeCompare(b.name, "en-SG"));
 
 const serialized = JSON.stringify(kept);
-await mkdir("public", { recursive: true });
-await writeFile("public/schools.json", serialized);
+await mkdir("data", { recursive: true });
+await writeFile("data/schools.json", serialized);
 console.log(
   `School bundle: ${kept.length} schools incl. ${higherLearning.length} universities/polytechnics ` +
     `(OneMap ${geocodedOneMap}, OSM ${geocodedOsm}, ${ungeocoded.length} ungeocoded; ` +

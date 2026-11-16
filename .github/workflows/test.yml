@@ -1,8 +1,8 @@
-name: test
+name: Rust
 
 on:
   push:
-    branches: [master]
+    branches: [main, rune-rewrite]
   pull_request:
 
 concurrency:
@@ -13,9 +13,13 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  check:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 60
+    env:
+      # Keep test builds small: Rune is a large dependency tree.
+      CARGO_PROFILE_TEST_DEBUG: 0
+      CARGO_PROFILE_TEST_STRIP: debuginfo
     steps:
       - name: Checkout repository
         # v6
@@ -23,20 +27,27 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup Bun
-        # v2
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-        with:
-          bun-version-file: package.json
+      - name: Install Linux build dependencies
+        # Rune's winit keyboard library needs xkbcommon headers on Linux.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libxkbcommon0
 
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - name: Rust toolchain
+        # rust-toolchain.toml pins 1.99.1 with clippy + rustfmt.
+        run: |
+          rustup toolchain install 1.99.1 --profile minimal --component clippy,rustfmt
+          rustup component add rust-src
 
-      - name: Typecheck
-        run: bun run typecheck
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
 
-      - name: Lint
-        run: bun run lint
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Test
-        run: bun test
+        # Live/network smoke tests are #[ignore] and stay offline in CI.
+        run: cargo test --workspace

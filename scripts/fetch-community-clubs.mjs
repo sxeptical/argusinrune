@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * Authoring-time data pipeline (not run in CI or deployment). Builds the
- * static community-club bundle (public/community-clubs.json) from the
+ * static community-club bundle (data/community-clubs.json) from the
  * People's Association "Community Club / PAssion WaVe Outlet" dataset
  * (data.gov.sg, Singapore Open Data Licence).
  *
@@ -86,8 +86,8 @@ const { places: withPhotos, applied: pickedCount } = await applyPhotoPicks(
 const photoCount = withPhotos.filter((club) => club.photos.length).length;
 
 const serialized = JSON.stringify(withPhotos);
-await mkdir("public", { recursive: true });
-await writeFile("public/community-clubs.json", serialized);
+await mkdir("data", { recursive: true });
+await writeFile("data/community-clubs.json", serialized);
 console.log(
   `Community club bundle: ${clubs.length} outlets ` +
     `(${clubs.filter((club) => club.kind === "community-club").length} community clubs, ${clubs.filter((club) => club.kind === "passionwave").length} PAssion WaVe; ` +

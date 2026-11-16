@@ -212,8 +212,8 @@ const { places: hawkers } = await applyPhotoPicks(
 );
 const withPhotos = (places, source) => places.filter((place) => place.photos.some((photo) => photo.source === source)).length;
 const serialized = JSON.stringify({ hawkers, malls });
-await mkdir("public", { recursive: true });
-await writeFile("public/amenities.json", serialized);
+await mkdir("data", { recursive: true });
+await writeFile("data/amenities.json", serialized);
 console.log(
   `Amenities bundle: ${hawkers.length} hawker centres (${hawkers.filter((h) => h.status === "planned").length} planned; ` +
     `photos: ${withPhotos(hawkers, "commons")} Commons, ${withPhotos(hawkers, "nea")} NEA), ` +

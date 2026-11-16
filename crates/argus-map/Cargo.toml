@@ -1,0 +1,13 @@
+[package]
+name = "argus-map"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+# Same pinned rev + features as argus-app: Rune gives us raster images
+# (`ImageCache`/`El::pixels`), `Shape` overlays, `Latest` background work and
+# the `tooling` feature so `--snap`/`--list-scenes` work in release too.
+rune = { git = "https://github.com/anomalyco/rune", rev = "55ef5268f22038a95344b3e9d2b4a25ddba731b1", features = ["tooling"] }
+# Tiles are fetched on Rune worker threads, so the blocking client is enough.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "blocking"] }

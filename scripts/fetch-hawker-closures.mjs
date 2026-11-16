@@ -1,17 +1,17 @@
 #!/usr/bin/env bun
 /**
  * Authoring-time data pipeline (not run in CI or deployment). Builds the
- * static hawker-closure bundle (public/hawker-closures.json) from NEA's
+ * static hawker-closure bundle (data/hawker-closures.json) from NEA's
  * "Dates of Hawker Centres Closure" (data.gov.sg, Singapore Open Data
  * Licence), joined by hawker-centre id onto the hawkers in
- * public/amenities.json.
+ * data/amenities.json.
  *
  * This is deliberately a separate script and output from
  * scripts/fetch-amenities.mjs: that script also refetches malls and their
  * Wikimedia Commons photos (paced, rate-limited), so refreshing closures
  * there would regenerate the whole amenities bundle and its photos for a
  * yearly schedule update. This script only reads the existing
- * public/amenities.json to resolve ids; the runtime join in
+ * data/amenities.json to resolve ids; the runtime join in
  * lib/data/amenities.ts pairs each hawker with its periods, so rerunning
  * fetch-amenities.mjs later does not invalidate this file.
  *
@@ -99,8 +99,8 @@ const period = (kind, startRaw, endRaw, remarksRaw) => {
   return { kind, start, end, remarks: cleanRemark(remarksRaw) };
 };
 
-const hawkers = (JSON.parse(await readFile("public/amenities.json", "utf8"))).hawkers ?? [];
-if (!hawkers.length) throw new Error("public/amenities.json has no hawkers; run fetch-amenities.mjs first");
+const hawkers = (JSON.parse(await readFile("data/amenities.json", "utf8"))).hawkers ?? [];
+if (!hawkers.length) throw new Error("data/amenities.json has no hawkers; run fetch-amenities.mjs first");
 const hawkerByName = new Map(hawkers.map((hawker) => [normalizeName(hawker.name), hawker]));
 
 const poll = await fetchJson(`https://api-open.data.gov.sg/v1/public/api/datasets/${CLOSURE_DATASET}/poll-download`);
@@ -150,8 +150,8 @@ if (totalPeriods < 400) throw new Error(`Only ${totalPeriods} closure periods pa
 
 const bundle = Object.fromEntries([...closuresById].sort((a, b) => a[0].localeCompare(b[0])));
 const serialized = JSON.stringify(bundle);
-await mkdir("public", { recursive: true });
-await writeFile("public/hawker-closures.json", serialized);
+await mkdir("data", { recursive: true });
+await writeFile("data/hawker-closures.json", serialized);
 console.log(
   `Hawker closures: ${closuresById.size} centres with ${totalPeriods} periods ` +
     `(${exact} exact-name joins, ${nearest} nearest-within-150m; ${unmatched.length} unmatched: ${unmatched.join("; ") || "none"}), ${Buffer.byteLength(serialized)} bytes`,

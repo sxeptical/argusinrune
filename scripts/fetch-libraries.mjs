@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * Authoring-time data pipeline (not run in CI or deployment). Builds the
- * static public-library bundle (public/libraries.json) from:
+ * static public-library bundle (data/libraries.json) from:
  *  - NLB Libraries (data.gov.sg, Singapore Open Data Licence): 27 points
  *    (24 public libraries, National Library, 3 library@ mall kiosks), all
  *    attributes packed in the KML HTML `Description` (parsed with
@@ -130,8 +130,8 @@ const { places: withPhotos, applied: pickedCount } = await applyPhotoPicks(
 const photoCount = withPhotos.filter((library) => library.photos.length).length;
 
 const serialized = JSON.stringify(withPhotos);
-await mkdir("public", { recursive: true });
-await writeFile("public/libraries.json", serialized);
+await mkdir("data", { recursive: true });
+await writeFile("data/libraries.json", serialized);
 console.log(
   `Library bundle: ${libraries.length} branches ` +
     `(${nlbSkipped.length} skipped; ${added.length} added from OSM: ${added.map((l) => l.name).join("; ") || "none"}; photos on ${photoCount} ` +

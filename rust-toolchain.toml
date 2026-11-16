@@ -1,0 +1,4 @@
+# Match the toolchain Rune pins at the rev in the root Cargo.toml.
+[toolchain]
+channel = "1.99.1"
+components = ["clippy", "rustfmt"]

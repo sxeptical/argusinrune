@@ -62,7 +62,7 @@ const matchKey = (name) =>
   name.toLowerCase().replace(/\b(?:park|parks|nature|reserve|garden|gardens|hill|the|singapore|national)\b/g, "").replace(/[^a-z0-9]/g, "");
 const phrase = (text) => text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
-const geometry = JSON.parse(await readFile("public/parks-geometry.json", "utf8"));
+const geometry = JSON.parse(await readFile("data/parks-geometry.json", "utf8"));
 const groups = new Map();
 for (const feature of geometry.features) {
   if (feature.properties.kind !== "park") continue;
@@ -140,7 +140,7 @@ for (const group of places.toSorted((a, b) => a.name.localeCompare(b.name, "en-S
   for (const name of group.parks.toSorted()) bundle[name] = photos;
 }
 const serialized = JSON.stringify(bundle);
-await writeFile("public/park-photos.json", serialized);
+await writeFile("data/park-photos.json", serialized);
 
 const withAny = places.filter((group) => photosByGroup.get(group.id)?.length);
 const big = places.filter((group) => group.areaHa >= SEARCH_MIN_HECTARES);

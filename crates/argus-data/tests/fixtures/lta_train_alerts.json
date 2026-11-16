@@ -1,0 +1,16 @@
+{
+  "value": [
+    {
+      "Status": 2,
+      "Message": [ { "Content": "No train service between Buona Vista and Raffles Place" } ],
+      "AffectedSegments": [
+        { "Line": "EWL", "Stations": "EW21,EW22" },
+        { "Line": "NEL", "Stations": ["NE1", "NE7"] },
+        { "Line": "PEL", "Stations": "PE1" },
+        { "Line": "XYZ", "Stations": "XY1" }
+      ],
+      "Start_time": "2026-09-09T08:15:00",
+      "End_time": null
+    }
+  ]
+}

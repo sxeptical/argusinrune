@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <title>Test feed</title>
+  <item>
+    <title>Singapore <b>budget</b> debate &amp; plans</title>
+    <link>https://example.test/singapore/budget</link>
+    <pubDate>Mon, 01 Jan 2026 00:00:00 GMT</pubDate>
+    <category>Singapore</category>
+  </item>
+  <item>
+    <title>Global markets</title>
+    <link>https://example.test/world/markets</link>
+    <pubDate>Mon, 01 Jan 2026 00:00:00 GMT</pubDate>
+    <category>World</category>
+  </item>
+  <item>
+    <title>No link</title>
+    <pubDate>Mon, 01 Jan 2026 00:00:00 GMT</pubDate>
+  </item>
+</channel></rss>
