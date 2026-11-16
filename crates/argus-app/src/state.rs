@@ -545,6 +545,7 @@ pub fn scene_mall_directory(s: &mut AppState) {
             .cloned()
     });
     s.selection = id.map(|id| Selection::Amenity { kind: AmenityType::Mall, id });
+    s.preload_images = true;
     s.recompute();
 }
 
@@ -559,13 +560,25 @@ pub fn scene_route_planner(s: &mut AppState) {
 pub fn scene_poi_dialog(s: &mut AppState) {
     s.data = Box::new(LiveDataSource::new());
     s.visibility.insert("malls".into(), true);
-    let id = s
-        .registry
-        .as_ref()
-        .and_then(|r| r.layers.iter().find(|l| l.amenity_type == AmenityType::Mall))
-        .and_then(|l| l.places.first())
-        .map(|p| p.id().to_string());
+    // Prefer a mall that has both a photo and an indexed store directory so
+    // the POI dialog golden exercises both new panels.
+    let id = s.static_data.as_ref().and_then(|d| {
+        d.mall_store_index
+            .malls
+            .keys()
+            .find(|id| {
+                d.malls.iter().any(|m| &m.id == *id && !m.photos.is_empty())
+            })
+            .cloned()
+    }).or_else(|| {
+        s.registry
+            .as_ref()
+            .and_then(|r| r.layers.iter().find(|l| l.amenity_type == AmenityType::Mall))
+            .and_then(|l| l.places.first())
+            .map(|p| p.id().to_string())
+    });
     s.selection = id.map(|id| Selection::Amenity { kind: AmenityType::Mall, id });
+    s.preload_images = true;
     s.recompute();
 }
 
@@ -593,6 +606,16 @@ pub fn scene_cameras(s: &mut AppState) {
     s.visibility.insert("cameras".into(), true);
     s.preload_feeds = true;
     s.preload_images = true;
+    s.recompute();
+}
+
+/// The larger camera preview opened by clicking a thumbnail in `cameras`.
+pub fn scene_camera_dialog(s: &mut AppState) {
+    scene_cameras(s);
+    // Scenes run before `setup`; fetch the feed here too so the dialog has a
+    // camera to open. `setup` re-preloads from the client's TTL cache.
+    s.data.preload_sync();
+    s.camera_dialog = s.data.snapshot().cameras.first().map(|c| c.camera_id.clone());
     s.recompute();
 }
 

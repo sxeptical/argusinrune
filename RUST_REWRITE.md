@@ -561,10 +561,68 @@ camera-row keys, toasts moved over the map so the right column stays readable.
 
 ### Remaining gaps
 
-Camera images are drawn as placeholders (image URLs are in the snapshot but
-not decoded), no photo gallery in the focus dialog, OneMap search is not wired
-into the search box (the static bundles + live bus stops cover the original
-index), and feedback's Neon insert is implemented by argus-data but was not
-exercised against a live database. The `loading` scene exists for structural
-checks; the desktop app renders the dashboard directly because feeds settle
-asynchronously rather than gating a single boot screen.
+~~Camera images are drawn as placeholders~~, ~~no photo gallery in the focus
+dialog~~ — both were closed in Phase 4b below. OneMap search was **never a
+runtime feature**: `lib/map-search.ts` builds a static index from the MRT
+GeoJSON + live bus stops and `MapSearch.tsx` only filters that prop (the only
+"OneMap" references in the TS tree are authoring-time `coordsSource` labels in
+the schools bundle). The Rust `search` module already covers it, so there is
+nothing to port. Feedback's Neon insert is implemented by argus-data but was
+not exercised against a live database. The `loading` scene exists for
+structural checks; the desktop app renders the dashboard directly because
+feeds settle asynchronously rather than gating a single boot screen.
+
+## Phase 4b — remaining UI features (2026-11-17)
+
+### Raster image pipeline
+
+`argus-data/src/images.rs` adds `is_allowed_image_url` (camera hosts from
+`lta::is_safe_camera_url` plus Wikimedia/NEA photo hosts) and
+`Client::get_image_bytes` (8 MiB cap, descriptive UA, `HttpClient::get_bytes_limited`
+transport seam). `argus-app/src/images.rs` owns an `ImageStore`: a `Latest` batch
+fetches bytes on Rune workers, `ImageCache` decodes them, and handles are
+cached by URL and painted with `El::pixels_fit(.., SurfaceFit::Fill)` (the
+original's `object-cover`). `preload_sync` fetches + `Image::wait()`s in `setup`
+for deterministic headless frames. Camera frames are re-fetched whenever the
+60 s camera feed lands (presigned URLs can stay the same while the JPEG
+changes); failed URLs get a 30 s negative-cache cooldown.
+
+- Road Cameras panel shows real thumbnails; clicking opens a large preview
+  with coords, © LTA attribution and a manual REFRESH button.
+- Mall focus dialog embeds the store directory: query, category chips, halal
+  toggle, level-grouped rows and the datastore credit. State and view model in
+  `mall_directory.rs` (reset per mall, like the TS `key={mallId}`).
+- Amenity/park photos render in the focus dialog with thumbnails and the
+  per-photo attribution line from `photo_gallery.rs`; broken URLs drop out once
+  (TS `onError` equivalent).
+- Map hover popups use argus-map's `hovered` overlay id and pointer position,
+  with title/lines/photos built by `hover.rs` from the same argus-core
+  `PopupLine` builders the TS app used (incidents, carparks, EV, amenities,
+  parks + small labels for flights/stops/stations/cameras).
+
+Visual fix: the Flights panel called
+`format!("{}ft", format_altitude_feet(..))` although the helper already
+appends ` ft`, rendering `2,925 ftft` and truncating the column; it now uses
+the helper directly. Audited every snap for other duplicated units / overlap.
+
+### Scenes and snaps
+
+`--list-scenes` now prints: `dashboard`, `layers-on`, `route-planner`,
+`poi-dialog`, `mall-directory`, `photo-gallery`, `hover-popup`, `panels`,
+`live`, `cameras`, `camera-dialog`, `loading`. All were rendered at
+`--scale 1 --theme dark` into `docs/snaps/` and visually inspected. `cameras`,
+`camera-dialog`, `poi-dialog`, `mall-directory`, `photo-gallery` and the
+hover/photo scenes preload real images in `setup`; `panels` and `hover-popup`
+use deterministic fixtures. `map.png` and `shell.png` are kept from earlier
+phases. No keys or presigned camera URLs are rendered into a PNG.
+
+### Verification
+
+- `cargo build --workspace`: green, no warnings.
+- `cargo test --workspace`: argus-core 58 + 9 integration, argus-data 43 + 17
+  integration (12 live smoke ignored), argus-app 23, argus-map 23 — all green.
+  New tests cover image dedupe/fresh/negative-cache, image URL allowlist,
+  mall-directory filtering/reset, gallery clamp + attribution, hover popup
+  content, and the new scenes' state + Rune `Runtime` smoke.
+- `cargo run -p argus-app -- --snap docs/snaps/cameras.png --scene cameras`
+  shows real decoded LTA JPEG frames.

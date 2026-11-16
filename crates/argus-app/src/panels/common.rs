@@ -96,6 +96,11 @@ pub fn rule() -> El {
     el().key("rule").w_full().h(1.0).fill(LINE)
 }
 
+/// Keyed separator, for dialogs that stack more than one rule in one column.
+pub fn rule_key(key: &str) -> El {
+    el().key(key).w_full().h(1.0).fill(LINE)
+}
+
 /// Empty / loading / unconfigured hint used while feeds are not wired.
 pub fn hint(text_str: impl Into<String>) -> El {
     text(text_str.into()).font(TINY).color(FAINT).max_lines(3)

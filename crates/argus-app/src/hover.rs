@@ -160,7 +160,7 @@ mod tests {
         s.visibility.insert("incidents".into(), true);
         s.recompute();
         let target = s.overlay_targets.iter()
-            .find_map(|(id, t)| matches!(t, Target::Incident(_)).then_some(t.clone()))
+            .find_map(|(_, t)| matches!(t, Target::Incident(_)).then_some(t.clone()))
             .expect("fixture has incidents");
         let content = content_for(&s, &target).expect("incident popup");
         assert!(content.title.contains("ACCIDENT") || !content.title.is_empty());
@@ -170,7 +170,7 @@ mod tests {
 
     #[test]
     fn amenity_popup_uses_core_descriptions_and_photos() {
-        let mut s = state();
+        let s = state();
         let id = s.registry.as_ref().unwrap().layers.iter()
             .find(|l| l.amenity_type == argus_core::types::AmenityType::Mall)
             .and_then(|l| l.places.first())

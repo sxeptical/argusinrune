@@ -71,7 +71,7 @@ fn focus_dialog(s: &AppState) -> Option<El> {
                 .map(|group| group.iter().filter(|o| o.id != *id).take(4).cloned().collect())
                 .unwrap_or_default();
             if !others.is_empty() {
-                body = body.child(rule()).child(label(format!("Also here ({})", others.len())));
+                body = body.child(rule_key("focus/rule/also-here")).child(label(format!("Also here ({})", others.len())));
                 for other in others {
                     let target = other.key.rsplit_once(':').map(|(_, id)| id.to_string());
                     body = body.child(text(&other.key).font(TINY).color(MUTED).truncate());
@@ -81,10 +81,10 @@ fn focus_dialog(s: &AppState) -> Option<El> {
                 }
             }
             if *kind == argus_core::types::AmenityType::Mall {
-                body = body.child(rule()).child(mall_store_directory(s, id, place.name()));
+                body = body.child(rule_key("focus/rule/mall-dir")).child(mall_store_directory(s, id, place.name()));
             }
             if !place.photos().is_empty() {
-                body = body.child(rule()).child(photo_gallery(s, place.name()));
+                body = body.child(rule_key("focus/rule/photos")).child(photo_gallery(s, place.name()));
             }
             (amenity_label(*kind).to_string(), place.name().to_string(), body)
         }
@@ -118,7 +118,7 @@ fn focus_dialog(s: &AppState) -> Option<El> {
                 }
             }
             if !s.gallery_photos.is_empty() {
-                body = body.child(rule()).child(photo_gallery(s, name));
+                body = body.child(rule_key("focus/rule/photos")).child(photo_gallery(s, name));
             }
             use argus_core::types::ParkFeatureKind;
             let label = match kind {
@@ -166,7 +166,7 @@ fn focus_dialog(s: &AppState) -> Option<El> {
         }
     };
 
-    let card = modal_card("focus/card", 450.0, 180.0, 540.0, 520.0)
+    let card = modal_card("focus/card", 450.0, 70.0, 540.0, 770.0)
         .child(dialog_header(&title, &format!("FOCUS · {subtitle}"), Msg::ClearSelection))
         .child(col().key("focus/scroll").w_full().min_h(0.0).grow(1.0).scroll(rune::ScrollSpec { stick_bottom: false })
             .child(body));
@@ -183,7 +183,7 @@ fn photo_gallery(s: &AppState, name: &str) -> El {
     let active_i = active_index(&s.photo_gallery, photos.len());
     let active = photos[active_i];
 
-    let mut large = el().key("gallery/large").w_full().h(140.0).min_h(0.0).fill(SURFACE_RAISED)
+    let mut large = el().key("gallery/large").w_full().h(112.0).min_h(0.0).fill(SURFACE_RAISED)
         .border(1.0, LINE);
     if let Some(image) = s.images.image(&active.thumb) {
         large = large.pixels_fit(image.pixels(), rune::SurfaceFit::Fill)
@@ -264,7 +264,7 @@ fn mall_store_directory(s: &AppState, mall_id: &str, mall_name: &str) -> El {
     }
     head = head.child(chips);
 
-    let mut list = col().key("mall-dir/list").w_full().h(176.0).min_h(0.0).gap(2.0)
+    let mut list = col().key("mall-dir/list").w_full().h(140.0).min_h(0.0).gap(2.0)
         .scroll(ScrollSpec { stick_bottom: false });
     if view.groups.is_empty() {
         list = list.child(hint("No shops match"));

@@ -7,7 +7,10 @@ use rune::{Env, Runtime};
 use super::{view, Msg};
 use crate::msg::{dispatch, toggle_layer};
 use crate::{search, state};
-use crate::state::{AppState, MrtPickTarget, Selection, Target, scene_panels};
+use crate::state::{
+    AppState, MrtPickTarget, Selection, Target, scene_cameras, scene_hover_popup,
+    scene_mall_directory, scene_panels, scene_photo_gallery,
+};
 
 fn state() -> AppState {
     let mut s = state::init();
@@ -113,6 +116,65 @@ fn subfilter_toggle_changes_the_amenity_filter() {
     // The first tap on an all-on filter solos that option.
     assert!(selected[&value]);
     assert!(selected.values().filter(|v| **v).count() == 1);
+}
+
+#[test]
+fn camera_scene_preloads_feed_and_image_urls() {
+    let mut s = state::init();
+    scene_cameras(&mut s);
+    assert!(s.preload_feeds && s.preload_images);
+    assert!(s.visibility["cameras"]);
+    let (_, cameras) = s.image_urls();
+    // The scene mutator runs before `setup` preloads the feed, so the URLs
+    // arrive from `poll` once the camera response lands.
+    assert!(cameras.is_empty() || cameras.iter().all(|u| argus_data::lta::is_safe_camera_url(u)));
+}
+
+#[test]
+fn mall_directory_scene_loads_a_indexed_store_list() {
+    let mut s = state::init();
+    scene_mall_directory(&mut s);
+    let id = match &s.selection {
+        Some(Selection::Amenity { kind: AmenityType::Mall, id }) => id.clone(),
+        other => panic!("expected a mall selection, got {other:?}"),
+    };
+    assert_eq!(s.mall_stores_for.as_deref(), Some(id.as_str()));
+    assert!(!s.mall_stores.is_empty(), "the chosen mall has a directory bundle");
+    assert_eq!(s.mall_directory.mall_id.as_deref(), Some(id.as_str()));
+}
+
+#[test]
+fn photo_gallery_scene_derives_photo_urls() {
+    let mut s = state::init();
+    scene_photo_gallery(&mut s);
+    assert!(!s.gallery_photos.is_empty());
+    assert!(s.preload_images);
+    let (photos, cameras) = s.image_urls();
+    assert_eq!(photos.len(), s.gallery_photos.len());
+    assert!(photos.iter().all(|u| argus_data::images::is_allowed_image_url(u)));
+    assert!(cameras.is_empty(), "fixture-free scene has no camera feed");
+}
+
+#[test]
+fn hover_popup_scene_pins_a_hovered_incident() {
+    let mut s = state::init();
+    scene_hover_popup(&mut s);
+    let id = s.map.hovered.expect("an incident overlay is hovered");
+    assert!(matches!(s.overlay_targets.get(&id), Some(Target::Incident(_))));
+    let (x, y) = s.map.pointer();
+    assert!(x > 0.0 && y > 0.0, "pointer is placed at the feature");
+    assert!(crate::hover::content_for(&s, &s.overlay_targets[&id]).is_some());
+}
+
+#[test]
+fn new_scenes_render_without_panicking() {
+    for scene in [scene_mall_directory, scene_photo_gallery, scene_hover_popup] {
+        let mut s = state::init();
+        scene(&mut s);
+        let mut rt = Runtime::new(s, view, (1440.0, 900.0), Env { system_dark: true, scale: 1.0 });
+        rt.frame(0.0);
+        assert!(rt.find("map/canvas").is_some());
+    }
 }
 
 #[test]

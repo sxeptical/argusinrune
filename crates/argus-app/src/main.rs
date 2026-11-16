@@ -178,6 +178,7 @@ fn main() {
             ("panels", state::scene_panels),
             ("live", state::scene_live),
             ("cameras", state::scene_cameras),
+            ("camera-dialog", state::scene_camera_dialog),
             ("loading", |s| { s.collapsed_groups.insert("boot/loading".into()); }),
         ],
         setup: Some(setup),
