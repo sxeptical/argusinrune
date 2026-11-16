@@ -1,0 +1,11 @@
+{
+  "data": {
+    "items": [
+      {
+        "timestamp": "2026-01-01T00:00:00+08:00",
+        "updatedTimestamp": "2026-01-01T00:30:00+08:00",
+        "readings": { "pm25_one_hourly": { "north": 88, "south": 173, "east": 160, "west": 195 } }
+      }
+    ]
+  }
+}

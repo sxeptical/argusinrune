@@ -1,0 +1,28 @@
+{
+  "LastUpdatedTime": "2026-10-21 16:30:00",
+  "evLocationsData": [
+    {
+      "name": "CLARKE QUAY",
+      "address": "3E RIVER VALLEY ROAD SINGAPORE 179024",
+      "latitude": 1.290314,
+      "longtitude": 103.846728,
+      "postalCode": "179024",
+      "chargingPoints": [
+        {
+          "operator": "SP MOBILITY PTE. LTD.",
+          "plugTypes": [
+            { "plugType": "Combo 2", "current": "DC", "powerRating": "50", "evIds": [{ "status": "1" }, { "status": "0" }] },
+            { "plugType": "Type 2", "current": "AC", "powerRating": "22", "evIds": [{ "status": "" }] }
+          ]
+        },
+        {
+          "operator": "SHELL",
+          "plugTypes": [
+            { "plugType": "CCS", "current": "DC", "powerRating": "180", "evIds": [{ "status": "1" }] }
+          ]
+        }
+      ]
+    },
+    { "name": "NO COORDS", "address": "X", "latitude": null, "longtitude": null, "chargingPoints": [] }
+  ]
+}

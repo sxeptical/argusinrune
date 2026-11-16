@@ -403,3 +403,90 @@ assertions in `tests/layers.test.tsx` (its pure `buildLayerGroups`/toggle logic 
 - `cargo test -p argus-core`: **67 passed** (58 inline unit tests + 9 integration
   tests in `tests/port_tests.rs`), 0 failed.
 - `cargo build --workspace`: green.
+
+## argus-data API (Phase 3)
+
+New implementation of `crates/argus-data` (lib). It ports `lib/api-clients/*`,
+the `app/api/*/route.ts` producers, `lib/cache.ts`, `lib/errors.ts`,
+`lib/feedback*.ts` and the config/keys handling. Cloudflare rate limiting and
+the Workers L2 cache are intentionally dropped (no Workers in a desktop app).
+`reqwest::blocking` + rustls is used throughout, with a descriptive
+`User-Agent`; every call is synchronous so it fits directly inside a Rune
+`Latest` closure. `argus-data` depends only on `argus-core` (+ serde/reqwest/
+config crates), never on `rune`.
+
+### Entry point
+
+```rust,ignore
+let client = argus_data::Client::new(); // .env + ~/.config/argus/config.toml
+let stops = client.get_bus_stops()?;
+let weather = client.get_weather()?;
+let health = client.source_health(); // SourceHealth[] for the panel
+```
+
+`Client::with_config(...)` and `Client::with_transport(config, Arc<dyn Transport>)`
+are the test seams. Each source module adds inherent methods to `Client`, so
+one client owns config, HTTP, cache and health. The old Phase 1 `ApiClient`
+skeleton is kept for `argus-app` compatibility.
+
+### Module map (TS → Rust)
+
+| Rust module | TypeScript source |
+| --- | --- |
+| `http` | `lib/api-clients/http.ts` — `HttpClient::get_json` / `get_text_limited`, timeouts, `ExternalApi`/`SchemaParse`/`Timeout` mapping. `Transport` seam replaces stubbed `fetch` in tests. |
+| `error` | `lib/errors.ts` — `ExternalApi`, `SchemaParse`, `Timeout`, `BadRequest`, `Forbidden`, plus `NotConfigured` for missing keys. |
+| `config` | process env + `.env` (dotenvy) + `~/.config/argus/config.toml` (toml/dirs, override `ARGUS_CONFIG_FILE`). Keys: `LTA_API_KEY`, `AVIATIONSTACK_API_KEY`, optional `DATABASE_URL`. Placeholders become `None`. |
+| `cache` | `lib/cache.ts` — per-key TTL cache, in-flight producer dedup (condvar), 10s/60s negative caching, oldest-entry eviction, value-dependent TTL (weather partial = 30s), open-ended `set`/`peek` (flights last-good). No L2. |
+| `lta` | `lib/api-clients/lta.ts` + bus-arrivals/bus-stops/cameras/carparks/ev-chargers/incidents/train-alerts routes — pagination (`$skip`), 404-as-empty, camera URL allowlist, EV batch link allowlist, all normalizers. |
+| `bus_routes` | `lib/api-clients/bus-routes.ts` + bus-routes route — BusRouter/sgbusdata polyline decoding, pattern scoring, loop rotation, direction selection, route assembly. Falls back to stop chords when geometry is unavailable. |
+| `weather` | `lib/api-clients/weather.ts` — seven data.gov.sg feeds fetched in parallel; PSI/PM2.5/UV/four-day normalization; partial snapshots cached 30s. |
+| `news` | `lib/api-clients/news.ts` — Straits Times + CNA RSS/Atom, entity decoding, categories, Singapore relevance filter, 512 KiB body cap, dedup, newest-first, top 20. |
+| `flights` | `lib/api-clients/flights.ts` — AviationStack (4 endpoints) → OpenSky fallback → last-good 10-minute snapshot; direction classification (airport codes, then bearing to Changi); km/h → m/s; top 120. |
+| `feedback` | `lib/feedback*.ts`, `lib/feedback-store.ts`, Neon SQL — `FeedbackSubmission` validation and `INSERT` via Neon's SQL-over-HTTP endpoint. |
+| `health` | `app/hooks/use-dashboard-sources.ts` — per-source `ok/stale/error/unconfigured/loading`, last-updated ms, TS labels. |
+| `wire` | (new) upstream spellings that differ from `argus-core::api_types`: `CameraID`, `CarParkID`, EV batch camelCase; converts into core types before normalizing. |
+| `util`, `time` | sha256 short ids; ISO 8601 / RFC 2822 parsing to replace `Date.parse`/`toISOString` without chrono. |
+
+### Cache keys / TTLs (from the TS clients)
+
+`bus-stops` 24h · `bus-arrivals-{id}` 15s · `traffic-cameras` 60s · `incidents`
+60s · `train-service-alerts` 60s · `carpark-availability` 60s ·
+`ev-charging-locations` 5m · `bus-routes-index` 24h · `weather` 5m (30s partial)
+· `news` 15m · `flights-sg` 15s · `flights-sg-fallback` open-ended (10m read
+window). `busrouter-geometry-unavailable` is negatively cached for 5m.
+
+### Config and missing keys
+
+Keys are read from env (including `.env` in cwd) first, then the TOML file;
+top-level keys and `[api]` / `[keys]` tables are accepted. A missing or
+placeholder key becomes `NotConfigured`, which makes that source report
+`unconfigured` rather than failing with a network error. LTA-backed sources
+return that error; flights degrade to OpenSky; feedback returns a clear error
+and does not insert. `DATABASE_URL` is optional.
+
+### Feedback
+
+Neon's serverless driver is one POST to `https://<host>/sql` with
+`Neon-Connection-String: <DATABASE_URL>` and a parameterised `INSERT INTO
+feedback (rating, message, country, ...)`; the existing `scripts/sql/feedback.sql`
+table is reused. Without a URL the call is a no-op returning `NotConfigured`
+(no driver, no schema changes). The live smoke test only checks config presence;
+it never inserts a row.
+
+### Verification (Phase 3)
+
+- `cargo test -p argus-data`: **58 passed** (41 unit + 17 fixture-driven
+  integration tests in `tests/clients.rs`), 0 failed. 12 `#[ignore]` live smoke
+  tests in `tests/live_smoke.rs`.
+- Live smoke (`cargo test -p argus-data --test live_smoke -- --ignored --nocapture --test-threads=1`,
+  2026-11-17, real keys from `.env`): all 12 pass — bus stops 5209, bus
+  arrivals 1, bus routes 2 directions, cameras 8, incidents 36, carparks 2127,
+  EV chargers 2821, weather 4-day entries 4, news 20, flights 5, train alerts 1;
+  feedback config present. All sources reported `ok`.
+- `cargo build --workspace`: green.
+
+Limitations: no aggregate request deadline per route (per-request timeouts are
+used instead), concurrency in LTA page walks is sequential (skip order and
+short-page termination are preserved), no disk cache, the app must supply its
+own `Latest`/poll wiring (argus-data is deliberately UI-agnostic), and the
+Neon feedback path sends SQL but was not exercised against the live database.

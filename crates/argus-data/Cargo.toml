@@ -10,3 +10,16 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "blocking"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
+# Config: .env in cwd + ~/.config/argus/config.toml.
+dotenvy = "0.15"
+dirs = "6"
+toml = "0.8"
+# Stable short ids for incidents / carparks / EV locations (mirrors node:crypto
+# sha256(...).slice(0, 16) in the TS clients).
+sha2 = "0.10"
+hex = "0.4"
+# RSS/Atom tag extraction (mirrors the TS regular expressions).
+regex = "1"
+
+[dev-dependencies]
+# `live_smoke` uses the real config from .env; it is #[ignore]d by default.

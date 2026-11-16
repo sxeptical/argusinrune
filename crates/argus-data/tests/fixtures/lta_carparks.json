@@ -1,0 +1,8 @@
+{
+  "value": [
+    { "CarParkID": "TPMN", "Area": "", "Development": "BLK 78B TOA PAYOH CENTRAL", "Location": "1.33489 103.84857", "AvailableLots": 421, "LotType": "C", "Agency": "HDB" },
+    { "CarParkID": "TPMN", "Area": "", "Development": "BLK 78B TOA PAYOH CENTRAL", "Location": "1.33489 103.84857", "AvailableLots": 12, "LotType": "Y", "Agency": "HDB" },
+    { "CarParkID": "1", "Area": "", "Development": "Suntec City", "Location": "1.293 103.857", "AvailableLots": 3, "LotType": "H", "Agency": "LTA" },
+    { "CarParkID": "X", "Area": "", "Development": "Bad coords", "Location": "", "AvailableLots": 5, "LotType": "C", "Agency": "HDB" }
+  ]
+}
