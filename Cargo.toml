@@ -6,6 +6,7 @@ members = [
     "crates/argus-core",
     "crates/argus-data",
     "crates/argus-app",
+    "crates/argus-map",
 ]
 
 [workspace.package]

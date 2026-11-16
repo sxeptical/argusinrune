@@ -234,3 +234,94 @@ host preference. We will likely define our own tactical palette constants in `ar
 5. `.grow()` flex children need a bounded ancestor and `.min_h(0.0)` or they collapse to zero.
 6. No tests were added that assert the PNG bytes yet — only the structural `--tree` check and the
    visual inspection above. Add golden assertions in Phase 2 when real features exist.
+
+## argus-map API (Phase 5)
+
+New crate `crates/argus-map` (lib, depends on `rune` + `reqwest`; **no** `argus-core`
+dependency — it defines its own small overlay types for the app to map domain data onto).
+Source layout: `projection.rs` (Mercator), `camera.rs` (camera + bounds clamp), `tile.rs`
+(background fetch + caches), `overlay.rs` (generic features, cull/cluster/hit-test),
+`state.rs` (`MapState`/`MapMsg`), `view.rs` (`map_view`), `examples/map_demo.rs`.
+
+### Raster vs vector decision
+
+Rune **can** draw arbitrary raster images: `ImageCache::load(bytes)` → `Image::pixels()`
+→ `El::pixels(&pixels)`, and `El::absolute(left, top)` positions them (every El is a
+containing block for absolute children). So Phase 5 uses **raster tiles**, not MVT
+decoding — overlays are drawn GPU-side with `Shape`/`canvas` in the same view.
+
+- **Default source: Esri World Dark Gray Canvas (Base)**, a keyless 256px dark JPEG
+  raster (`server.arcgisonline.com/.../World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}`,
+  note the `z/y/x` order). Attribution: `Tiles © Esri · Esri, HERE, Garmin, © OpenStreetMap contributors`.
+- **CARTO `dark_all` / `dark_nolabels` are supported but need a key**: since 2026-09-25
+  keyless raster requests return an "API KEY REQUIRED" watermark tile. Set
+  `ARGUS_CARTO_KEY` (or `TileStore::with_key`) to use CARTO cleanly; it is free for
+  reasonable non-commercial/commercial use. Attribution: `© OpenStreetMap contributors · © CARTO`.
+  `TileSource::attribution()` / `MapState::attribution()` return the right string.
+- Every request sends a descriptive `User-Agent` (`USER_AGENT`).
+- Tiles are fetched on Rune worker threads via `rune::Latest` + `reqwest::blocking`,
+  cached in a bounded in-memory LRU (256 decoded `Image` handles by default) and on
+  disk under `cache_dir()` (`ARGUS_CACHE_DIR` → XDG/HOME platform cache → temp).
+  While a child tile loads, the nearest cached ancestor is drawn scaled at its
+  correct geographic rect (no Rune image-cropping needed); exact tiles paint on top.
+  Failed tiles are not retried every frame (parent fallback covers the gap).
+
+### Camera / input
+
+`MapCamera`: lng/lat centre + fractional zoom + viewport (pts) + bounds/zoom limits.
+Defaults match `Map.tsx` (`103.8198, 1.3521`, zoom `10.8`); clamp is
+`SINGAPORE_BOUNDS` (`103.55–104.15 E`, `1.10–1.55 N`), zoom `9..=17`. When the
+viewport is larger than the bounds the centre (not the midpoint) is clamped, so the
+default centre is preserved. `screen_to_lnglat` / `lnglat_to_screen` handle input;
+`zoom_at` keeps the lng/lat under the cursor fixed. Handlers on the map element:
+drag-to-pan (`tx.live_only()` on move), wheel + trackpad-pinch zoom around cursor,
+double-click zoom (`Drag::clicks >= 2`), hover hit-test (only invalidates on change).
+Click vs drag is distinguished by travel from the *press origin*.
+
+### Overlays and events
+
+`overlays::Overlays` holds `points` (`MapPoint` with `PointStyle`/`Icon`), `lines`
+(`Polyline`), `polygons` (`Polygon`) and `circles` (`RadiusCircle`, metres).
+Generic `OverlayId = u64`; colours are `Rgba` (no Rune in this type). `drawn_points`
+culls to the viewport and, below `ClusterOptions::max_cluster_zoom` (default 12),
+collapses points into 44pt screen-grid clusters (count shown as a text label).
+`hit_test` / `hit_test_polygon` return the app's id. `radius_circle_ring` samples a
+ground-radius circle. `MapMsg` = `OverlayClicked(id)` / `CameraChanged` /
+`GeoFilterPicked(lnglat)`; the app drains `MapState::drain_messages()` in `poll`.
+
+### App integration
+
+```rust,ignore
+struct App { map: MapState, overlays: Overlays }
+fn view(s: &App, cx: &mut rune::Cx<App>) -> rune::El {
+    argus_map::map_view_for(&s.map, &s.overlays, cx, |a| &mut a.map)
+}
+fn setup(s: &mut App, w: rune::Waker) { s.map.setup(w); /* + preload_sync() for snaps */ }
+fn poll(s: &mut App, _t: f64, _tx: &mut rune::Tx) -> bool {
+    let changed = s.map.poll();
+    for m in s.map.drain_messages() { /* route to app */ }
+    changed
+}
+```
+
+- If the app's Rune state type *is* `MapState`, use `map_view(state, overlays, cx)`.
+- Set `MapState::viewport` to the map element's size (views run before layout). Call
+  `set_overlays(&overlays)` whenever the hit-test mirror changes.
+- `map_view` returns a `.w_full().h_full()` element; size it inside a bounded ancestor.
+
+### Verification / snap
+
+- `cargo test -p argus-map`: 23 unit tests pass (projection round-trip + known values,
+  tile zoom/scale/coverage + ancestors, camera clamp/anchor/drag, LRU eviction,
+  CARTO/Esri URL building, culling/clustering, point/polygon hit-test, state messages).
+- `cargo build --workspace`: green.
+- `cargo run -p argus-map --example map_demo -- --snap docs/snaps/map.png --scene singapore --theme dark`
+  → 2000×1360 PNG showing the real Esri dark Singapore basemap, 4 sample markers,
+  an MRT-like polyline, a park polygon, a radius circle and the attribution. The demo
+  calls `MapState::preload_sync()` in `setup` so tiles are fetched/decoded before the
+  single headless frame (otherwise Rune's `Latest`/image workers would settle after it).
+
+Limitations: no smooth camera spring (moves are instant), no label rendering inside
+`Shape` (cluster counts use separate `text` Els), vector tiles are not decoded, and
+the radius circle is an equirectangular approximation (accurate over Singapore-scale
+radii only).
