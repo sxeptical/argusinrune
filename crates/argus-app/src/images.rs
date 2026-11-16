@@ -76,6 +76,12 @@ impl ImageStore {
         self.images.get(url).filter(|img| img.is_ready())
     }
 
+    /// True when Rune's decoder rejected the bytes for `url` (broken image
+    /// links are dropped from the gallery just like the TS `onError` handler).
+    pub fn image_failed(&self, url: &str) -> bool {
+        self.images.get(url).and_then(|img| img.error()).is_some()
+    }
+
     /// Queue a fetch for every URL in `urls` that is not already cached.
     ///
     /// `fresh` marks camera frames: their presigned URL can stay identical

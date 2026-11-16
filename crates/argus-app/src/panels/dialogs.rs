@@ -1,9 +1,11 @@
 //! Modal layers: focus dialog, map search, camera preview, feedback form.
 
 use argus_core::maps_links::format_coordinates;
-use rune::{Color, Cx, El, col, el, row, text, text_input};
+use rune::{Color, Cx, El, ScrollSpec, col, el, row, text, text_input};
 
+use crate::mall_directory::build_view;
 use crate::msg::{Msg, dispatch};
+use crate::photo_gallery::{active_index, caption, usable};
 use crate::overlays::amenity_label;
 use crate::panels::common::*;
 use crate::search;
@@ -78,6 +80,12 @@ fn focus_dialog(s: &AppState) -> Option<El> {
                     }
                 }
             }
+            if *kind == argus_core::types::AmenityType::Mall {
+                body = body.child(rule()).child(mall_store_directory(s, id, place.name()));
+            }
+            if !place.photos().is_empty() {
+                body = body.child(rule()).child(photo_gallery(s, place.name()));
+            }
             (amenity_label(*kind).to_string(), place.name().to_string(), body)
         }
         Selection::Flight(id) => {
@@ -108,6 +116,9 @@ fn focus_dialog(s: &AppState) -> Option<El> {
                 for line in argus_core::parks::describe_park_feature(&details) {
                     body = body.child(text(&line.text).font(TINY).color(MUTED).max_lines(3));
                 }
+            }
+            if !s.gallery_photos.is_empty() {
+                body = body.child(rule()).child(photo_gallery(s, name));
             }
             use argus_core::types::ParkFeatureKind;
             let label = match kind {
@@ -160,6 +171,139 @@ fn focus_dialog(s: &AppState) -> Option<El> {
         .child(col().key("focus/scroll").w_full().min_h(0.0).grow(1.0).scroll(rune::ScrollSpec { stick_bottom: false })
             .child(body));
     Some(modal_backdrop("focus/backdrop", card))
+}
+
+/// Photo viewer for the focus dialog: one large image, three thumbnails and
+/// the attribution required by the active photo's licence.
+fn photo_gallery(s: &AppState, name: &str) -> El {
+    let photos = usable(&s.gallery_photos, &s.photo_gallery);
+    if photos.is_empty() {
+        return el();
+    }
+    let active_i = active_index(&s.photo_gallery, photos.len());
+    let active = photos[active_i];
+
+    let mut large = el().key("gallery/large").w_full().h(140.0).min_h(0.0).fill(SURFACE_RAISED)
+        .border(1.0, LINE);
+    if let Some(image) = s.images.image(&active.thumb) {
+        large = large.pixels_fit(image.pixels(), rune::SurfaceFit::Fill)
+            .label(format!("{name}, photo {} of {}", active_i + 1, photos.len()));
+    } else {
+        large = large.child(hint("Loading photo…"));
+    }
+
+    let mut out = col().key("gallery").w_full().min_h(0.0).gap(6.0)
+        .child(label("PHOTOS"))
+        .child(large);
+
+    if photos.len() > 1 {
+        let mut thumbs = row().key("gallery/thumbs").w_full().gap(6.0);
+        for (i, photo) in photos.iter().take(3).enumerate() {
+            let is_active = i == active_i;
+            let msg = Msg::SetPhotoIndex(i);
+            let mut thumb = el().key(format!("gallery/thumb/{i}")).w(120.0).h(70.0)
+                .min_w(0.0).fill(SURFACE_RAISED)
+                .border(1.0, if is_active { INK } else { LINE })
+                .on_press(move |s: &mut AppState| dispatch(s, msg.clone()));
+            if let Some(image) = s.images.image(&photo.thumb) {
+                thumb = thumb.pixels_fit(image.pixels(), rune::SurfaceFit::Fill)
+                    .label(format!("Show photo {} of {}", i + 1, photos.len()));
+            }
+            thumbs = thumbs.child(thumb);
+        }
+        out = out.child(thumbs);
+    }
+    out.child(text(caption(active)).font(MICRO).color(MUTED).max_lines(2))
+}
+
+/// The mall store directory embedded in a mall's focus dialog (the TS app
+/// fetched it with SWRImmutable; here `AppState::recompute` loads it from the
+/// local bundle once per mall).
+fn mall_store_directory(s: &AppState, mall_id: &str, mall_name: &str) -> El {
+    let Some(data) = s.static_data.as_ref() else {
+        return hint("Store directory unavailable.");
+    };
+    if s.mall_stores_for.as_deref() != Some(mall_id) {
+        return hint("Loading store directory…");
+    }
+    if !data.mall_store_index.malls.contains_key(mall_id) {
+        return hint("No store directory is available for this mall.");
+    }
+    let view = build_view(&s.mall_stores, &s.mall_directory);
+
+    let mut head = col().key("mall-dir/head").w_full().min_h(0.0).gap(6.0).padding(6.0).fill(SURFACE_RAISED);
+    let count = if view.shown != view.total {
+        format!("{} of {} shops", view.shown, view.total)
+    } else {
+        format!("{} shops", view.total)
+    };
+    head = head.child(row().w_full().gap(6.0)
+        .child(label("STORE DIRECTORY").grow(1.0))
+        .child(text(count).font(MICRO_MONO).color(MUTED)));
+
+    let field = text_input(&s.mall_directory.query, rune::TextStyle::new(13.0, 400.0))
+        .key("mall-dir/query").single_line().w_full().min_h(24.0).color(INK)
+        .placeholder(&format!("Search {mall_name} shops or units…"), FAINT)
+        .label(format!("Search {mall_name} shops"))
+        .on_edit(|s: &mut AppState| &mut s.mall_directory.query);
+    head = head.child(row().key("mall-dir/filter").h(26.0).w_full().gap(6.0).fill(PAPER)
+        .child(text("⌕").font(BODY).color(FAINT)).child(field));
+
+    let mut chips = row().key("mall-dir/categories").w_full().gap(4.0).wrap();
+    let all_msg = Msg::SetMallStoreCategory(None);
+    chips = chips.child(press("mall-cat/all", format!("All ({})", view.total), all_msg,
+        s.mall_directory.category.is_none()));
+    for (name, n) in view.categories.iter().take(8) {
+        let msg = Msg::SetMallStoreCategory(Some(name.clone()));
+        chips = chips.child(press(&format!("mall-cat/{name}"), format!("{} ({n})", truncate_label(name, 32)),
+            msg, s.mall_directory.category.as_deref() == Some(name.as_str())));
+    }
+    if view.has_halal {
+        chips = chips.child(press("mall-cat/halal", "HALAL", Msg::ToggleMallStoreHalal,
+            s.mall_directory.halal_only));
+    }
+    head = head.child(chips);
+
+    let mut list = col().key("mall-dir/list").w_full().h(176.0).min_h(0.0).gap(2.0)
+        .scroll(ScrollSpec { stick_bottom: false });
+    if view.groups.is_empty() {
+        list = list.child(hint("No shops match"));
+    }
+    for group in &view.groups {
+        list = list.child(row().w_full().gap(6.0).padding(4.0).fill(SURFACE_RAISED)
+            .child(text(&group.label).font(MICRO).color(INK).grow(1.0))
+            .child(text(group.stores.len().to_string()).font(MICRO_MONO).color(MUTED)));
+        for store in &group.stores {
+            let mut row_el = row().key(format!("mall-store/{}", store.name)).w_full()
+                .min_h(0.0).padding(4.0).gap(6.0).border(1.0, LINE)
+                .child(col().grow(1.0).min_w(0.0).gap(1.0)
+                    .child(text(&store.name).font(SMALL).color(INK).truncate())
+                    .child(text(store.category.as_deref().unwrap_or("")).font(MICRO).color(MUTED).truncate()));
+            if store.halal {
+                row_el = row_el.child(text("HALAL").font(MICRO).color(SUCCESS));
+            }
+            if let Some(unit) = &store.unit {
+                row_el = row_el.child(text(unit).font(MICRO_MONO).color(MUTED));
+            }
+            list = list.child(row_el);
+        }
+    }
+
+    let fetched = &data.mall_store_index.fetched_at;
+    col().key("mall-dir").w_full().min_h(0.0).gap(4.0)
+        .child(head)
+        .child(list)
+        .child(text(format!("As listed by the mall operator ({fetched}) · curioputterings/singapore-mall-data (CC BY 4.0)"))
+            .font(MICRO).color(FAINT).max_lines(2))
+}
+
+fn truncate_label(label: &str, max: usize) -> String {
+    if label.chars().count() <= max {
+        label.to_string()
+    } else {
+        let prefix: String = label.chars().take(max.saturating_sub(1)).collect();
+        format!("{prefix}…")
+    }
 }
 
 fn search_dialog(s: &AppState) -> El {

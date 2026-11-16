@@ -41,6 +41,12 @@ pub enum Msg {
     CloseCamera,
     /// Re-fetch the LTA camera feed and its frames on demand.
     RefreshCameraImages,
+    /// Mall store directory filters.
+    SetMallStoreCategory(Option<String>),
+    ToggleMallStoreHalal,
+    /// Place photo gallery: pick a thumbnail, drop a broken image.
+    SetPhotoIndex(usize),
+    MarkPhotoFailed(String),
     ToggleBell,
     ToggleNotificationRail,
     ToggleNotificationRoad,
@@ -198,6 +204,11 @@ pub fn dispatch(s: &mut AppState, msg: Msg) {
                 .collect();
             s.images.update(s.now, &[], &cameras);
         }
+        Msg::SetMallStoreCategory(category) => s.mall_directory.category = category,
+        Msg::ToggleMallStoreHalal => s.mall_directory.halal_only = !s.mall_directory.halal_only,
+        Msg::SetPhotoIndex(index) => s.photo_gallery.active = index,
+        Msg::MarkPhotoFailed(url) => s.photo_gallery.mark_failed(&url),
+
         Msg::ToggleBell => {
             s.bell_open = !s.bell_open;
         }

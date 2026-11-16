@@ -10,11 +10,13 @@ use argus_core::data::{DataDir, StaticData};
 use argus_core::geo::{GeoFilter, GEO_FILTER_DEFAULT_RADIUS_M};
 use argus_core::mrt_routing::MrtRoutePlan;
 use argus_core::signals::{NotificationPrefs, SignalRow};
-use argus_core::types::{AmenityType, LngLat, MapSearchResult, ParkFeatureKind};
+use argus_core::types::{AmenityType, LngLat, MallStore, MapSearchResult, ParkFeatureKind, PlacePhoto};
 use argus_map::{MapState, Overlays, OverlayId, DEFAULT_CENTER, DEFAULT_ZOOM};
 use rune::TextEdit;
 
 use crate::images::ImageStore;
+use crate::mall_directory::MallDirectoryState;
+use crate::photo_gallery::PhotoGalleryState;
 use crate::live::{
     def, load_prefs, parse_center, parse_notifications, parse_radius, parse_station,
     parse_visibility, DataSource, FeedKind, LiveDataSource, OnDemand, SourceStatus,
@@ -153,6 +155,14 @@ pub struct AppState {
     pub camera_dialog: Option<String>,
     pub bell_open: bool,
     pub feedback: FeedbackState,
+    /// Filter state for the mall store directory in the focus dialog.
+    pub mall_directory: MallDirectoryState,
+    /// Store rows loaded for the selected mall (empty for other selections).
+    pub mall_stores: Vec<MallStore>,
+    pub mall_stores_for: Option<String>,
+    /// Photo records for the focused place (gallery state + fetched images).
+    pub gallery_photos: Vec<PlacePhoto>,
+    pub photo_gallery: PhotoGalleryState,
 
     // Notifications.
     pub notification_prefs: NotificationPrefs,
@@ -259,6 +269,11 @@ pub fn init() -> AppState {
         camera_dialog: None,
         bell_open: false,
         feedback: FeedbackState::default(),
+        mall_directory: MallDirectoryState::default(),
+        mall_stores: Vec::new(),
+        mall_stores_for: None,
+        gallery_photos: Vec::new(),
+        photo_gallery: PhotoGalleryState::default(),
         notification_prefs: parse_notifications(&prefs.notifications),
         toasts: Vec::new(),
         dismissed: HashSet::new(),
@@ -309,29 +324,10 @@ impl AppState {
         }
     }
 
-    /// Photo URLs for the current selection (amenity place photos or park
-    /// photos from the static bundles). The gallery fetches these once and
-    /// reuses the decoded handles.
+    /// Photo URLs for the current selection (already derived into
+    /// `gallery_photos`). The gallery fetches these once and reuses handles.
     pub fn photo_urls(&self) -> Vec<String> {
-        match &self.selection {
-            Some(Selection::Amenity { kind, id }) => self
-                .registry
-                .as_ref()
-                .and_then(|r| r.find(*kind, id))
-                .map(|(_, place)| place.photos().iter().map(|p| p.thumb.clone()).collect())
-                .unwrap_or_default(),
-            Some(Selection::Park { name, .. }) => self
-                .static_data
-                .as_ref()
-                .map(|d| {
-                    argus_core::data::photos_for_park(d, name)
-                        .iter()
-                        .map(|p| p.thumb.clone())
-                        .collect()
-                })
-                .unwrap_or_default(),
-            _ => Vec::new(),
-        }
+        self.gallery_photos.iter().map(|p| p.thumb.clone()).collect()
     }
 
     /// Everything the image pipeline needs: stable photo URLs and the current
@@ -356,6 +352,57 @@ impl AppState {
             self.data.set_arrivals_stop(Some(stop));
         } else {
             self.data.set_arrivals_stop(None);
+        }
+
+        // Photo gallery state is keyed by the focused place; the photo list
+        // itself comes from the static bundles (amenity / park photos).
+        if let Some(selection) = &self.selection {
+            self.photo_gallery.for_place(&selection.key());
+            self.gallery_photos = match selection {
+                Selection::Amenity { kind, id } => self
+                    .registry
+                    .as_ref()
+                    .and_then(|r| r.find(*kind, id))
+                    .map(|(_, place)| place.photos().to_vec())
+                    .unwrap_or_default(),
+                Selection::Park { name, .. } => self
+                    .static_data
+                    .as_ref()
+                    .map(|d| argus_core::data::photos_for_park(d, name).to_vec())
+                    .unwrap_or_default(),
+                _ => Vec::new(),
+            };
+        } else {
+            self.photo_gallery.clear();
+            self.gallery_photos.clear();
+        }
+
+        // A mall focus dialog loads its store list once (SWRImmutable in the
+        // original). Filters live in `mall_directory` and reset per mall.
+        match &self.selection {
+            Some(Selection::Amenity { kind: AmenityType::Mall, id }) => {
+                self.mall_directory.for_mall(id);
+                if self.mall_stores_for.as_deref() != Some(id.as_str()) {
+                    let indexed = self
+                        .static_data
+                        .as_ref()
+                        .is_some_and(|d| d.mall_store_index.malls.contains_key(id));
+                    self.mall_stores = if indexed {
+                        self.static_data
+                            .as_ref()
+                            .and_then(|_| StaticData::load_mall_store_list(&DataDir::default(), id).ok())
+                            .unwrap_or_default()
+                    } else {
+                        Vec::new()
+                    };
+                    self.mall_stores_for = Some(id.clone());
+                }
+            }
+            _ => {
+                self.mall_directory.clear();
+                self.mall_stores.clear();
+                self.mall_stores_for = None;
+            }
         }
 
         let plan = if self.route.start.is_empty() || self.route.end.is_empty() {
@@ -445,6 +492,41 @@ pub fn scene_layers_on(s: &mut AppState) {
     s.geo_radius_m = 3000.0;
     s.map.camera.center = argus_map::LngLat::new(103.8460, 1.3200);
     s.map.camera.zoom = 11.6;
+    s.recompute();
+}
+
+/// Focus dialog for a park with photos. Images are preloaded synchronously in
+/// `setup` so the headless frame shows decoded thumbnails and attribution.
+pub fn scene_photo_gallery(s: &mut AppState) {
+    s.data = Box::new(LiveDataSource::new());
+    s.visibility.insert("parks".into(), true);
+    let name = s
+        .static_data
+        .as_ref()
+        .and_then(|d| {
+            d.park_photos
+                .iter()
+                .find(|(_, photos)| !photos.is_empty())
+                .map(|(name, _)| name.clone())
+        })
+        .unwrap_or_else(|| "Admiralty Park".into());
+    s.selection = Some(Selection::Park { name, kind: ParkFeatureKind::Park });
+    s.preload_images = true;
+    s.recompute();
+}
+
+/// Mall focus dialog with the store directory loaded from the local bundle.
+pub fn scene_mall_directory(s: &mut AppState) {
+    s.data = Box::new(LiveDataSource::new());
+    s.visibility.insert("malls".into(), true);
+    let id = s.static_data.as_ref().and_then(|d| {
+        d.mall_store_index
+            .malls
+            .keys()
+            .find(|id| d.malls.iter().any(|m| &m.id == *id))
+            .cloned()
+    });
+    s.selection = id.map(|id| Selection::Amenity { kind: AmenityType::Mall, id });
     s.recompute();
 }
 

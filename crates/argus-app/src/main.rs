@@ -13,6 +13,8 @@
 mod fixtures;
 mod images;
 mod live;
+mod mall_directory;
+mod photo_gallery;
 mod msg;
 mod overlays;
 mod panels;
@@ -109,6 +111,15 @@ fn poll(s: &mut AppState, now: f64, tx: &mut Tx) -> bool {
     let (photos, cameras) = s.image_urls();
     changed |= s.images.update(now, &photos, &cameras);
     changed |= s.images.poll(now);
+    // A broken photo URL drops out of the gallery once, like the TS `onError`.
+    let broken: Vec<String> = photos
+        .into_iter()
+        .filter(|url| s.images.image_failed(url) && !s.photo_gallery.failed.contains(url))
+        .collect();
+    for url in broken {
+        s.photo_gallery.mark_failed(&url);
+        changed = true;
+    }
     for msg in s.map.drain_messages() {
         match msg {
             argus_map::MapMsg::OverlayClicked(id) => dispatch(s, Msg::MapClick(id)),
@@ -160,6 +171,8 @@ fn main() {
             ("layers-on", state::scene_layers_on),
             ("route-planner", state::scene_route_planner),
             ("poi-dialog", state::scene_poi_dialog),
+            ("mall-directory", state::scene_mall_directory),
+            ("photo-gallery", state::scene_photo_gallery),
             ("panels", state::scene_panels),
             ("live", state::scene_live),
             ("cameras", state::scene_cameras),
