@@ -257,6 +257,18 @@ impl MapState {
         self.push_message(MapMsg::CameraChanged { center: self.camera.center, zoom: self.camera.zoom });
     }
 
+    /// Last pointer position in map-local points. The app uses this to place
+    /// its hover popup beside the hovered feature.
+    pub fn pointer(&self) -> (f32, f32) {
+        self.last_pointer
+    }
+
+    /// Seed the pointer position (used by hover-popup scenes and tests, which
+    /// set `hovered` directly instead of receiving a platform mouse event).
+    pub fn set_pointer(&mut self, x: f32, y: f32) {
+        self.last_pointer = (x, y);
+    }
+
     /// Hover hit-test. Returns true when the hovered id changed (so the view
     /// can be invalidated only when needed).
     pub fn hover(&mut self, x: f32, y: f32) -> bool {

@@ -495,6 +495,24 @@ pub fn scene_layers_on(s: &mut AppState) {
     s.recompute();
 }
 
+/// Map hover popup over a road incident (fixture data, deterministic).
+pub fn scene_hover_popup(s: &mut AppState) {
+    scene_panels(s);
+    s.visibility.insert("incidents".into(), true);
+    s.recompute();
+    let hovered = s.overlays.points.iter()
+        .find(|p| matches!(s.overlay_targets.get(&p.id), Some(Target::Incident(_))))
+        .map(|p| {
+            let screen = s.map.camera.lnglat_to_screen(p.position);
+            (p.id, screen)
+        });
+    if let Some((id, (x, y))) = hovered {
+        s.map.hovered = Some(id);
+        s.map.set_pointer(x, y);
+    }
+    s.recompute();
+}
+
 /// Focus dialog for a park with photos. Images are preloaded synchronously in
 /// `setup` so the headless frame shows decoded thumbnails and attribution.
 pub fn scene_photo_gallery(s: &mut AppState) {

@@ -2,7 +2,7 @@
 
 use argus_core::layers::{LayerLegendItem, layer_by_key};
 use argus_map::map_view_for;
-use rune::{Cx, El, col, el, row, text};
+use rune::{Cx, El, SurfaceFit, col, el, row, text};
 
 use crate::msg::{Msg, dispatch};
 use crate::panels::common::{dot, press};
@@ -23,7 +23,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     }
     toolbar = toolbar.child(text(coords).font(MICRO_MONO).color(MUTED));
 
-    let map_el = map_view_for(&s.map, &s.overlays, cx, |a: &mut AppState| &mut a.map)
+    let mut map_el = map_view_for(&s.map, &s.overlays, cx, |a: &mut AppState| &mut a.map)
         .key("map/canvas").grow(1.0).min_h(0.0).w_full()
         .on_layout(|s: &mut AppState, rect: [f32; 4]| {
             if rect[2] > 1.0 && rect[3] > 1.0 {
@@ -32,6 +32,9 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         })
         .child(search_button())
         .child(map_hints(s));
+    if let Some(popup) = hover_popup(s) {
+        map_el = map_el.child(popup);
+    }
 
     col().key("map-pane").grow(1.0).min_w(0.0).min_h(0.0).gap(4.0)
         .child(toolbar)
@@ -40,6 +43,50 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         .child(legend(s))
         .child(row().key("map/attribution").h(14.0).w_full().center_y()
             .child(text(s.map.attribution()).font(MICRO).color(FAINT).truncate()))
+}
+
+/// Compact hover tooltip for the overlay under the cursor. Content comes from
+/// the argus-core popups/parks/mobility builders, matching the original
+/// `Map.tsx` `showHoverPopup`; argus-map supplies the hovered overlay id and
+/// pointer position.
+fn hover_popup(s: &AppState) -> Option<El> {
+    let id = s.map.hovered?;
+    let target = s.overlay_targets.get(&id)?;
+    let content = crate::hover::content_for(s, target)?;
+    let (px, py) = s.map.pointer();
+    let (vw, vh) = s.map.viewport;
+    let w = 264.0;
+    let h = (32.0 + content.lines.len() as f32 * 15.0
+        + if content.photos.is_empty() { 0.0 } else { 42.0 }).clamp(48.0, 190.0);
+    let x = (px + 14.0).min((vw - w - 6.0).max(4.0)).max(4.0);
+    let y = (py - h * 0.5).min((vh - h - 6.0).max(4.0)).max(4.0);
+
+    let mut card = col().key("map/hover-popup").w(w).h(h).min_h(0.0).absolute(x, y)
+        .fill(OVERLAY).border(1.0, LINE_STRONG).radius(4.0).padding(8.0).gap(3.0)
+        .child(text(&content.title).font(MICRO).color(content.title_color).truncate());
+
+    if !content.photos.is_empty() {
+        let mut strip = row().key("map/hover-popup/photos").h(34.0).gap(4.0);
+        for (i, url) in content.photos.iter().take(3).enumerate() {
+            let mut thumb = el().key(format!("map/hover-popup/photo/{i}")).w(74.0).h(34.0).fill(PAPER);
+            if let Some(image) = s.images.image(url) {
+                thumb = thumb.pixels_fit(image.pixels(), SurfaceFit::Fill)
+                    .label(format!("{} photo {}", content.title, i + 1));
+            }
+            strip = strip.child(thumb);
+        }
+        card = card.child(strip);
+    }
+
+    for line in &content.lines {
+        let color = match line.kind.as_str() {
+            "hint" => FAINT,
+            "message" | "name" => INK,
+            _ => MUTED,
+        };
+        card = card.child(text(&line.text).font(TINY).color(color).max_lines(2));
+    }
+    Some(card)
 }
 
 fn search_button() -> El {

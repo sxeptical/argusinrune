@@ -11,6 +11,7 @@
 //! ```
 
 mod fixtures;
+mod hover;
 mod images;
 mod live;
 mod mall_directory;
@@ -173,6 +174,7 @@ fn main() {
             ("poi-dialog", state::scene_poi_dialog),
             ("mall-directory", state::scene_mall_directory),
             ("photo-gallery", state::scene_photo_gallery),
+            ("hover-popup", state::scene_hover_popup),
             ("panels", state::scene_panels),
             ("live", state::scene_live),
             ("cameras", state::scene_cameras),
