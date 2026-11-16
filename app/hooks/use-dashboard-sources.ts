@@ -1,0 +1,256 @@
+"use client";
+
+import useSWR from "swr";
+import { apiFetch } from "@/lib/api-fetch";
+import { FLIGHTS_ENABLED } from "@/lib/features";
+import type {
+  BusStop,
+  CarparkAvailability,
+  EvChargingLocation,
+  FlightState,
+  NewsItem,
+  TrafficCamera,
+  TrafficIncident,
+  TrainServiceAlert,
+  WeatherData,
+} from "@/types";
+
+export type SourceStatus = "pending" | "loading" | "ok" | "error";
+
+export type SourceState = {
+  readonly key: string;
+  readonly label: string;
+  readonly status: SourceStatus;
+  readonly message?: string;
+};
+
+type SourceDefinition = {
+  readonly key: string;
+  readonly label: string;
+  readonly url: string;
+  readonly refreshMs: number;
+};
+
+const BUS_STOPS: SourceDefinition = {
+  key: "bus stops",
+  label: "LTA Bus Network",
+  url: "/api/bus-stops",
+  // Match the server's 24-hour cache for this large, mostly static catalogue.
+  refreshMs: 30 * 60 * 1000,
+};
+const CAMERAS: SourceDefinition = {
+  key: "cameras",
+  label: "Traffic Cameras",
+  url: "/api/cameras",
+  refreshMs: 60 * 1000,
+};
+const INCIDENTS: SourceDefinition = {
+  key: "incidents",
+  label: "Road Incidents",
+  url: "/api/incidents",
+  refreshMs: 60 * 1000,
+};
+const CARPARKS: SourceDefinition = {
+  key: "carparks",
+  label: "Carpark Availability",
+  url: "/api/carparks",
+  refreshMs: 60 * 1000,
+};
+const EV_CHARGERS: SourceDefinition = {
+  key: "ev chargers",
+  label: "EV Charging Points",
+  url: "/api/ev-chargers",
+  // LTA regenerates the EV snapshot every five minutes.
+  refreshMs: 5 * 60 * 1000,
+};
+const WEATHER: SourceDefinition = {
+  key: "weather",
+  label: "Weather Grid",
+  url: "/api/weather",
+  refreshMs: 5 * 60 * 1000,
+};
+const NEWS: SourceDefinition = {
+  key: "news",
+  label: "OSINT Stream",
+  url: "/api/news",
+  refreshMs: 15 * 60 * 1000,
+};
+const FLIGHTS: SourceDefinition = {
+  key: "flights",
+  label: "Airspace Feed",
+  url: "/api/flights",
+  refreshMs: 15 * 1000,
+};
+const TRAIN_ALERTS: SourceDefinition = {
+  key: "train alerts",
+  label: "Train Service Alerts",
+  url: "/api/train-alerts",
+  // Match the server cache; disruption state changes slowly.
+  refreshMs: 60 * 1000,
+};
+
+// Stable fallbacks: a fresh [] every render would re-run consumers' effects
+// (the map source sync) even when no data arrived.
+const EMPTY_CARPARKS: CarparkAvailability[] = [];
+const EMPTY_EV_CHARGERS: EvChargingLocation[] = [];
+
+const EMPTY_REGIONAL_AIR = {
+  north: null,
+  south: null,
+  east: null,
+  west: null,
+  central: null,
+} as const;
+
+const DEFAULT_WEATHER: WeatherData = {
+  temperature: null,
+  humidity: null,
+  psi: null,
+  psiStatus: "Unknown",
+  psiRegions: EMPTY_REGIONAL_AIR,
+  pm25OneHour: null,
+  pm25OneHourBand: "Unknown",
+  pm25OneHourRegions: EMPTY_REGIONAL_AIR,
+  uv: null,
+  uvStatus: "Unknown",
+  fourDay: [],
+  forecast: "Loading...",
+  lastUpdated: new Date().toISOString(),
+};
+
+function useSource<T>(source: SourceDefinition | null, refreshWhenHidden = false) {
+  return useSWR<T, Error>(source?.url ?? null, apiFetch<T>, {
+    refreshInterval: source?.refreshMs ?? 0,
+    refreshWhenHidden,
+    revalidateOnFocus: true,
+    // Boot must settle even when a route hangs: apiFetch times out at 15s,
+    // and SWR retries with backoff instead of leaving sources in `loading`.
+    dedupingInterval: 5_000,
+    errorRetryCount: 3,
+    errorRetryInterval: 5_000,
+  });
+}
+
+function toSourceState(
+  source: SourceDefinition,
+  result: {
+    readonly data: unknown;
+    readonly error: Error | undefined;
+    readonly isLoading: boolean;
+  },
+): SourceState {
+  if (result.error) {
+    return {
+      key: source.key,
+      label: source.label,
+      status: "error",
+      message: result.error.message,
+    };
+  }
+  if (result.data !== undefined) {
+    return { key: source.key, label: source.label, status: "ok" };
+  }
+  return {
+    key: source.key,
+    label: source.label,
+    status: result.isLoading ? "loading" : "pending",
+  };
+}
+
+/**
+ * Layers whose feeds are only fetched while toggled on. They never gate boot,
+ * so turning one on doesn't send the dashboard back to the loading screen.
+ */
+export type OnDemandLayers = {
+  readonly carparks: boolean;
+  readonly evChargers: boolean;
+};
+
+export function useDashboardSources(
+  onDemand: OnDemandLayers,
+  // Only the feeds behind notifications keep polling in a background tab, and
+  // only once browser alerts are on, so other users' hidden tabs stay idle.
+  pollSignalsWhenHidden: boolean,
+) {
+  // Hooks stay unconditional; a null SWR key disables flights (and hidden
+  // on-demand layers) without changing hook order.
+  const busStops = useSource<BusStop[]>(BUS_STOPS);
+  const cameras = useSource<TrafficCamera[]>(CAMERAS);
+  const incidents = useSource<TrafficIncident[]>(INCIDENTS, pollSignalsWhenHidden);
+  const weather = useSource<WeatherData>(WEATHER, pollSignalsWhenHidden);
+  const news = useSource<NewsItem[]>(NEWS);
+  const flights = useSource<FlightState[]>(FLIGHTS_ENABLED ? FLIGHTS : null);
+  const trainAlerts = useSource<TrainServiceAlert[]>(TRAIN_ALERTS, pollSignalsWhenHidden);
+  const carparks = useSource<CarparkAvailability[]>(
+    onDemand.carparks ? CARPARKS : null,
+  );
+  const evChargers = useSource<EvChargingLocation[]>(
+    onDemand.evChargers ? EV_CHARGERS : null,
+  );
+
+  const enabled = [
+    { definition: BUS_STOPS, result: busStops },
+    { definition: CAMERAS, result: cameras },
+    { definition: INCIDENTS, result: incidents },
+    { definition: WEATHER, result: weather },
+    { definition: NEWS, result: news },
+    { definition: TRAIN_ALERTS, result: trainAlerts },
+    ...(FLIGHTS_ENABLED
+      ? [{ definition: FLIGHTS, result: flights }]
+      : []),
+  ];
+  const onDemandEnabled = [
+    ...(onDemand.carparks ? [{ definition: CARPARKS, result: carparks }] : []),
+    ...(onDemand.evChargers
+      ? [{ definition: EV_CHARGERS, result: evChargers }]
+      : []),
+  ];
+  const activeSources = [...enabled, ...onDemandEnabled].map(
+    ({ definition, result }) => toSourceState(definition, result),
+  );
+  const sources: SourceState[] = FLIGHTS_ENABLED
+    ? activeSources
+    : [
+        ...activeSources,
+        {
+          key: FLIGHTS.key,
+          label: FLIGHTS.label,
+          status: "ok",
+          message: "disabled",
+        },
+      ];
+  const failedSources = activeSources.filter(
+    (source) => source.status === "error",
+  );
+
+  return {
+    busStops: busStops.data ?? [],
+    cameras: cameras.data ?? [],
+    incidents: incidents.data ?? [],
+    weather: weather.data ?? DEFAULT_WEATHER,
+    news: news.data ?? [],
+    flights: flights.data ?? [],
+    trainAlerts: trainAlerts.data ?? [],
+    carparks: carparks.data ?? EMPTY_CARPARKS,
+    evChargers: evChargers.data ?? EMPTY_EV_CHARGERS,
+    signalsLoaded: {
+      rail: trainAlerts.data !== undefined,
+      road: incidents.data !== undefined,
+      weather: weather.data !== undefined,
+    },
+    sources,
+    activeSources,
+    onlineSourceCount: activeSources.filter(
+      (source) => source.status === "ok",
+    ).length,
+    bootComplete: enabled.every(
+      ({ result }) => result.data !== undefined || result.error !== undefined,
+    ),
+    error:
+      failedSources.length > 0
+        ? `Some data sources failed: ${failedSources
+            .map((source) => source.key)
+            .join(", ")}`
+        : null,
+  };
+}

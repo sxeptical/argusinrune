@@ -1,0 +1,179 @@
+/**
+ * localStorage-backed history helpers. Persisted and current points are merged
+ * by timestamp so hydration cannot overwrite newer data. Stores cap both the
+ * number of series and points per series.
+ */
+
+export type TimestampedPoint = { readonly timestamp: string };
+
+// ---------- JSON storage primitives ----------
+
+export function readStoredJson(key: string): unknown {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as unknown) : null;
+  } catch {
+    // Treat corrupted or unavailable storage as empty history.
+    return null;
+  }
+}
+
+export function writeStoredJson(key: string, value: unknown): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Storage failures leave the in-memory history usable.
+  }
+}
+
+// ---------- Point list helpers ----------
+
+function byTimestamp(a: TimestampedPoint, b: TimestampedPoint): number {
+  return Date.parse(a.timestamp) - Date.parse(b.timestamp);
+}
+
+/** Union of two point lists; on a shared timestamp the right-hand wins. */
+export function mergePointLists<T extends TimestampedPoint>(
+  persisted: readonly T[],
+  current: readonly T[],
+): T[] {
+  if (persisted.length === 0) return [...current];
+  if (current.length === 0) return [...persisted];
+  const merged = new Map<string, T>();
+  for (const point of persisted) merged.set(point.timestamp, point);
+  for (const point of current) merged.set(point.timestamp, point);
+  return [...merged.values()].sort(byTimestamp);
+}
+
+export function readPointList<T extends TimestampedPoint>(
+  key: string,
+  validate: (value: unknown) => value is T,
+  maxPoints: number,
+): T[] {
+  const parsed = readStoredJson(key);
+  if (!Array.isArray(parsed)) return [];
+  return parsed
+    .filter(validate)
+    .sort(byTimestamp)
+    .slice(-maxPoints);
+}
+
+export function writePointList<T extends TimestampedPoint>(
+  key: string,
+  points: readonly T[],
+  maxPoints: number,
+): void {
+  writeStoredJson(key, points.slice(-maxPoints));
+}
+
+// ---------- Keyed stores of point lists ----------
+
+export type PointStore<T extends TimestampedPoint> = Readonly<
+  Record<string, readonly T[]>
+>;
+
+export function readPointStore<T extends TimestampedPoint>(
+  key: string,
+  validate: (value: unknown) => value is T,
+): PointStore<T> {
+  const parsed = readStoredJson(key);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return {};
+  }
+  const store: Record<string, readonly T[]> = {};
+  for (const [seriesKey, value] of Object.entries(
+    parsed as Record<string, unknown>,
+  )) {
+    if (!Array.isArray(value)) continue;
+    const points = value.filter(validate).sort(byTimestamp);
+    if (points.length > 0) store[seriesKey] = points;
+  }
+  return store;
+}
+
+export function writePointStore<T extends TimestampedPoint>(
+  key: string,
+  store: PointStore<T>,
+  maxPointsPerSeries: number,
+  maxSeries: number,
+): void {
+  writeStoredJson(
+    key,
+    capStoreSeries(
+      mapStoreSeries(store, (points) => points.slice(-maxPointsPerSeries)),
+      maxSeries,
+    ),
+  );
+}
+
+/**
+ * Per-series union; on a shared timestamp the right-hand store wins. Returns
+ * `current` unchanged when persisted adds nothing, so callers can skip writes.
+ */
+export function mergePointStores<T extends TimestampedPoint>(
+  persisted: PointStore<T>,
+  current: PointStore<T>,
+): PointStore<T> {
+  const currentKeys = Object.keys(current);
+  if (currentKeys.length === 0) {
+    return Object.keys(persisted).length === 0 ? current : persisted;
+  }
+
+  let changed = Object.keys(persisted).some(
+    (seriesKey) => current[seriesKey] === undefined,
+  );
+  const merged: Record<string, readonly T[]> = { ...persisted };
+  for (const seriesKey of currentKeys) {
+    const points = current[seriesKey];
+    const previous = persisted[seriesKey] ?? [];
+    const list = mergePointLists(previous, points);
+    merged[seriesKey] = list;
+    if (
+      list.length !== points.length ||
+      list.some((point, index) => point !== points[index])
+    ) {
+      changed = true;
+    }
+  }
+  return changed ? merged : current;
+}
+
+function mapStoreSeries<T extends TimestampedPoint>(
+  store: PointStore<T>,
+  map: (points: readonly T[]) => readonly T[],
+): Record<string, readonly T[]> {
+  const next: Record<string, readonly T[]> = {};
+  for (const [seriesKey, points] of Object.entries(store)) {
+    const mapped = map(points);
+    if (mapped.length > 0) next[seriesKey] = mapped;
+  }
+  return next;
+}
+
+/** Drop the least-recently-updated series beyond `maxSeries`. */
+function capStoreSeries<T extends TimestampedPoint>(
+  store: Record<string, readonly T[]>,
+  maxSeries: number,
+): Record<string, readonly T[]> {
+  const keys = Object.keys(store);
+  if (keys.length <= maxSeries) return store;
+
+  const lastUpdated = (points: readonly T[]): number => {
+    const last = points[points.length - 1];
+    const parsed = last ? Date.parse(last.timestamp) : Number.NaN;
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+
+  const ordered = keys
+    .map((seriesKey) => ({ seriesKey, at: lastUpdated(store[seriesKey]) }))
+    .sort((a, b) => a.at - b.at);
+  const drop = new Set(ordered.slice(0, keys.length - maxSeries).map((e) => e.seriesKey));
+
+  const capped: Record<string, readonly T[]> = {};
+  for (const seriesKey of keys) {
+    if (!drop.has(seriesKey)) capped[seriesKey] = store[seriesKey];
+  }
+  return capped;
+}

@@ -1,0 +1,684 @@
+/** Combines LTA bus routes with BusRouter road-following geometry. */
+import { z } from "zod";
+import { cache } from "@/lib/cache";
+import { ExternalApiError } from "@/lib/errors";
+import { LtaBusRoutesResponseSchema } from "@/types/schemas";
+import type {
+  BusRouteDirection,
+  BusRouteResponse,
+  BusRouteStop,
+} from "@/types";
+import { collectLtaEndpoint, getBusStops } from "./lta";
+import { httpGetJson, withTimeout } from "./http";
+
+// BusRouter/sgbusdata polylines keep routes aligned to roads.
+const BUSROUTER_ROUTES_URL = "https://data.busrouter.sg/v1/routes.min.json";
+const BUSROUTER_ROUTES_FALLBACK_URL =
+  "https://cdn.jsdelivr.net/gh/cheeaun/sgbusdata@master/data/v1/routes.min.json";
+const BUS_ROUTES_TIMEOUT_MS = 90_000;
+const BUS_ROUTES_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const BUS_ROUTES_PAGE_SIZE = 500;
+const BUS_ROUTES_PAGE_CONCURRENCY = 4;
+/** Safety cap above the known ~26–27k-row BusRoutes dataset (500 rows/page). */
+export const BUS_ROUTES_MAX_PAGES = 128;
+const BUSROUTER_GEOMETRY_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+/** Briefly cache geometry-source failures to avoid repeated slow timeouts. */
+const BUSROUTER_GEOMETRY_NEGATIVE_TTL_MS = 5 * 60 * 1000;
+const BUSROUTER_GEOMETRY_TIMEOUT_MS = 15_000;
+const MAX_BUSROUTER_PATH_POINTS = 2_500;
+/** Correct in-order patterns typically score 10–30m; reject distant matches. */
+export const MAX_PATTERN_MATCH_DISTANCE_M = 200;
+/** A stop within this distance of a path segment counts as on that segment. */
+const STOP_ON_PATH_TOLERANCE_M = 60;
+/** Cap per-stop distance so one unmatched stop cannot dominate a score. */
+const MAX_STOP_DISTANCE_PENALTY_M = 5_000;
+/** First and last stop this close together → loop service. */
+const LOOP_TERMINUS_RADIUS_M = 300;
+/** Polyline start and end this close together → closed loop geometry. */
+const CLOSED_PATH_RADIUS_M = 200;
+
+// ---------- Bus routes index ----------
+
+type IndexedBusRouteStop = {
+  readonly busStopCode: string;
+  readonly stopSequence: number;
+};
+
+/** ServiceNo → Direction → ordered stop codes (pre-join). */
+type BusRoutesIndex = Map<string, Map<number, IndexedBusRouteStop[]>>;
+
+/**
+ * JSON shape for the L2 cache. Object keys become strings, so directional
+ * numbers are parsed back on the way out.
+ */
+type SerializedBusRoutesIndex = Record<
+  string,
+  Record<string, IndexedBusRouteStop[]>
+>;
+
+const encodeBusRoutesIndex = (
+  index: BusRoutesIndex,
+): SerializedBusRoutesIndex => {
+  const serialized: SerializedBusRoutesIndex = {};
+  for (const [serviceNo, byDirection] of index) {
+    const directions: Record<string, IndexedBusRouteStop[]> = {};
+    for (const [direction, stops] of byDirection) {
+      directions[String(direction)] = stops;
+    }
+    serialized[serviceNo] = directions;
+  }
+  return serialized;
+};
+
+const decodeBusRoutesIndex = (stored: unknown): BusRoutesIndex => {
+  if (!stored || typeof stored !== "object") {
+    throw new Error("invalid cached bus routes index");
+  }
+  const index: BusRoutesIndex = new Map();
+  for (const [serviceNo, directions] of Object.entries(
+    stored as SerializedBusRoutesIndex,
+  )) {
+    if (!directions || typeof directions !== "object") continue;
+    const byDirection = new Map<number, IndexedBusRouteStop[]>();
+    for (const [direction, stops] of Object.entries(directions)) {
+      const directionNo = Number(direction);
+      if (!Number.isFinite(directionNo) || !Array.isArray(stops)) continue;
+      byDirection.set(directionNo, stops as IndexedBusRouteStop[]);
+    }
+    if (byDirection.size > 0) index.set(serviceNo, byDirection);
+  }
+  // A malformed/empty entry must not masquerade as a valid 26k-row index.
+  if (index.size === 0) throw new Error("empty cached bus routes index");
+  return index;
+};
+
+const toFiniteNumber = (value: number | string): number | null => {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const buildBusRoutesIndex = (
+  rows: ReadonlyArray<{
+    readonly ServiceNo: string;
+    readonly Direction: number | string;
+    readonly StopSequence: number | string;
+    readonly BusStopCode: string;
+  }>,
+): BusRoutesIndex => {
+  // Accumulate unordered, then sort each direction by StopSequence.
+  const raw: BusRoutesIndex = new Map();
+
+  for (const row of rows) {
+    const serviceNo = row.ServiceNo?.trim();
+    const busStopCode = row.BusStopCode?.trim();
+    const direction = toFiniteNumber(row.Direction);
+    const stopSequence = toFiniteNumber(row.StopSequence);
+    if (
+      !serviceNo ||
+      !busStopCode ||
+      direction === null ||
+      stopSequence === null
+    ) {
+      continue;
+    }
+
+    let byDirection = raw.get(serviceNo);
+    if (!byDirection) {
+      byDirection = new Map();
+      raw.set(serviceNo, byDirection);
+    }
+    let stops = byDirection.get(direction);
+    if (!stops) {
+      stops = [];
+      byDirection.set(direction, stops);
+    }
+    stops.push({ busStopCode, stopSequence });
+  }
+
+  for (const byDirection of raw.values()) {
+    for (const [direction, stops] of byDirection) {
+      stops.sort((a, b) => a.stopSequence - b.stopSequence);
+      byDirection.set(direction, stops);
+    }
+  }
+
+  return raw;
+};
+
+const getBusRoutesIndex = (
+  signal?: AbortSignal,
+): Promise<BusRoutesIndex> =>
+  cache.get(
+    "bus-routes-index",
+    BUS_ROUTES_CACHE_TTL_MS,
+    () =>
+      withTimeout("lta-bus-routes", BUS_ROUTES_TIMEOUT_MS, async (pageSignal) =>
+        buildBusRoutesIndex(
+          await collectLtaEndpoint("/BusRoutes", LtaBusRoutesResponseSchema, {
+            pageSize: BUS_ROUTES_PAGE_SIZE,
+            maxPages: BUS_ROUTES_MAX_PAGES,
+            concurrency: BUS_ROUTES_PAGE_CONCURRENCY,
+            signal: pageSignal,
+          }),
+        ),
+      ),
+    {
+      signal,
+      shared: true,
+      sharedCodec: {
+        encode: encodeBusRoutesIndex,
+        decode: decodeBusRoutesIndex,
+      },
+    },
+  );
+
+// ---------- BusRouter geometry ----------
+
+/**
+ * Decode a Google-encoded polyline into [lng, lat] pairs.
+ * BusRouter / sgbusdata stores patterns in this format.
+ */
+export const decodeGooglePolyline = (encoded: string): Array<[number, number]> => {
+  const coordinates: Array<[number, number]> = [];
+  let index = 0;
+  let lat = 0;
+  let lng = 0;
+
+  while (index < encoded.length) {
+    let result = 0;
+    let shift = 0;
+    let byte = 0;
+    do {
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20 && index < encoded.length);
+    const dlat = result & 1 ? ~(result >> 1) : result >> 1;
+    lat += dlat;
+
+    result = 0;
+    shift = 0;
+    do {
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20 && index < encoded.length);
+    const dlng = result & 1 ? ~(result >> 1) : result >> 1;
+    lng += dlng;
+
+    coordinates.push([lng / 1e5, lat / 1e5]);
+  }
+
+  return coordinates;
+};
+
+/** Downsample long polylines so client payloads stay reasonable. */
+const downsamplePath = (
+  path: Array<[number, number]>,
+  maxPoints: number,
+): Array<[number, number]> => {
+  if (path.length <= maxPoints) return path;
+  const result: Array<[number, number]> = [];
+  const last = path.length - 1;
+  for (let i = 0; i < maxPoints; i += 1) {
+    const idx = Math.round((i * last) / (maxPoints - 1));
+    result.push(path[idx]);
+  }
+  return result;
+};
+
+/** Local planar distance to a segment, accurate at road-snapping scale. */
+const distanceToSegmentMeters = (
+  lng: number,
+  lat: number,
+  a: readonly [number, number],
+  b: readonly [number, number],
+): number => {
+  const mPerLng = Math.cos((lat * Math.PI) / 180) * 111_320;
+  const mPerLat = 110_540;
+  const ax = (a[0] - lng) * mPerLng;
+  const ay = (a[1] - lat) * mPerLat;
+  const dx = (b[0] - lng) * mPerLng - ax;
+  const dy = (b[1] - lat) * mPerLat - ay;
+  const lengthSq = dx * dx + dy * dy;
+  const t =
+    lengthSq === 0
+      ? 0
+      : Math.max(0, Math.min(1, -(ax * dx + ay * dy) / lengthSq));
+  return Math.hypot(ax + t * dx, ay + t * dy);
+};
+
+const distanceMeters = (
+  a: readonly [number, number],
+  b: readonly [number, number],
+): number => distanceToSegmentMeters(a[0], a[1], b, b);
+
+/** From segment `start`, slide forward while the stop keeps getting closer. */
+const slideToNearestSegment = (
+  path: Array<[number, number]>,
+  stop: BusRouteStop,
+  start: number,
+): { segment: number; distance: number } => {
+  let segment = start;
+  let distance = distanceToSegmentMeters(
+    stop.longitude,
+    stop.latitude,
+    path[segment],
+    path[segment + 1],
+  );
+  while (segment < path.length - 2) {
+    const next = distanceToSegmentMeters(
+      stop.longitude,
+      stop.latitude,
+      path[segment + 1],
+      path[segment + 2],
+    );
+    if (next > distance) break;
+    segment += 1;
+    distance = next;
+  }
+  return { segment, distance };
+};
+
+/**
+ * Project stops in route order so repeated roads and loopbacks select the
+ * correct pass. Off-road stops use the nearest forward segment without
+ * advancing the cursor.
+ */
+const projectStopsOntoPath = (
+  path: Array<[number, number]>,
+  stops: ReadonlyArray<BusRouteStop>,
+): Array<{ segment: number; distance: number }> => {
+  const projections: Array<{ segment: number; distance: number }> = [];
+  let cursor = 0;
+  for (const stop of stops) {
+    let nearest = { segment: cursor, distance: Number.POSITIVE_INFINITY };
+    let matched: { segment: number; distance: number } | null = null;
+    for (let segment = cursor; segment < path.length - 1; segment += 1) {
+      const distance = distanceToSegmentMeters(
+        stop.longitude,
+        stop.latitude,
+        path[segment],
+        path[segment + 1],
+      );
+      if (distance < nearest.distance) nearest = { segment, distance };
+      if (distance <= STOP_ON_PATH_TOLERANCE_M) {
+        matched = slideToNearestSegment(path, stop, segment);
+        break;
+      }
+    }
+    if (matched) {
+      projections.push(matched);
+      cursor = matched.segment;
+    } else {
+      projections.push(nearest);
+    }
+  }
+  return projections;
+};
+
+/** Rotate closed loop paths to begin at the first stop. */
+const startLoopAtFirstStop = (
+  path: Array<[number, number]>,
+  stops: ReadonlyArray<BusRouteStop>,
+): Array<[number, number]> => {
+  const first = stops[0];
+  const last = stops[stops.length - 1];
+  if (
+    path.length < 3 ||
+    !first ||
+    !last ||
+    distanceMeters(
+      [first.longitude, first.latitude],
+      [last.longitude, last.latitude],
+    ) > LOOP_TERMINUS_RADIUS_M ||
+    distanceMeters(path[0], path[path.length - 1]) > CLOSED_PATH_RADIUS_M
+  ) {
+    return path;
+  }
+  for (let segment = 0; segment < path.length - 1; segment += 1) {
+    const distance = distanceToSegmentMeters(
+      first.longitude,
+      first.latitude,
+      path[segment],
+      path[segment + 1],
+    );
+    if (distance <= STOP_ON_PATH_TOLERANCE_M) {
+      if (segment === 0) return path;
+      const start = slideToNearestSegment(path, first, segment).segment;
+      // path[0] ≈ path[last], so drop it when joining the two halves.
+      return [...path.slice(start), ...path.slice(1, start + 1)];
+    }
+  }
+  return path;
+};
+
+export type PatternFit = {
+  readonly path: Array<[number, number]>;
+  /** Per stop: index of the path segment the stop sits on. */
+  readonly stopSegments: number[];
+  /** Mean in-order stop distance in metres. Lower is better. */
+  readonly score: number;
+};
+
+/** Score a path by in-order stop distance to distinguish travel directions. */
+const fitPattern = (
+  pattern: Array<[number, number]>,
+  stops: ReadonlyArray<BusRouteStop>,
+): PatternFit => {
+  const path = startLoopAtFirstStop(pattern, stops);
+  const projections = projectStopsOntoPath(path, stops);
+  const total = projections.reduce(
+    (sum, { distance }) => sum + Math.min(distance, MAX_STOP_DISTANCE_PENALTY_M),
+    0,
+  );
+  return {
+    path,
+    stopSegments: projections.map(({ segment }) => segment),
+    score:
+      projections.length === 0 ? Number.POSITIVE_INFINITY : total / projections.length,
+  };
+};
+
+const bestFit = (
+  patterns: Array<Array<[number, number]>>,
+  stops: ReadonlyArray<BusRouteStop>,
+): PatternFit | null => {
+  let best: PatternFit | null = null;
+  for (const pattern of patterns) {
+    if (pattern.length < 2) continue;
+    const fit = fitPattern(pattern, stops);
+    if (!best || fit.score < best.score) best = fit;
+  }
+  return best && best.score < MAX_PATTERN_MATCH_DISTANCE_M ? best : null;
+};
+
+/** ServiceNo → decoded pattern polylines [lng, lat][] (one per direction pattern). */
+type BusRouterGeometryIndex = Map<string, Array<Array<[number, number]>>>;
+
+// Permissive: object of serviceNo → encoded polyline string[]; entries are
+// validated while decoding patterns below.
+const BusRouterRoutesSchema = z.record(z.string(), z.unknown());
+
+const decodeGeometryIndex = (body: unknown): BusRouterGeometryIndex => {
+  const index: BusRouterGeometryIndex = new Map();
+  if (!body || typeof body !== "object") return index;
+  for (const [serviceNo, patterns] of Object.entries(
+    body as Record<string, unknown>,
+  )) {
+    if (!Array.isArray(patterns)) continue;
+    const decodedPatterns: Array<Array<[number, number]>> = [];
+    for (const pattern of patterns) {
+      if (typeof pattern !== "string" || pattern.length < 4) continue;
+      try {
+        const path = downsamplePath(
+          decodeGooglePolyline(pattern),
+          MAX_BUSROUTER_PATH_POINTS,
+        );
+        if (path.length >= 2) decodedPatterns.push(path);
+      } catch {
+        // Skip malformed encodings.
+      }
+    }
+    if (decodedPatterns.length > 0) {
+      index.set(serviceNo, decodedPatterns);
+    }
+  }
+  return index;
+};
+
+const fetchBusRouterGeometryIndex =
+  async (): Promise<BusRouterGeometryIndex> => {
+    for (const url of [BUSROUTER_ROUTES_URL, BUSROUTER_ROUTES_FALLBACK_URL]) {
+      // Per-source failure falls through to the next URL.
+      const decoded = await httpGetJson(
+        "busrouter",
+        url,
+        { Accept: "application/json" },
+        BusRouterRoutesSchema,
+        BUSROUTER_GEOMETRY_TIMEOUT_MS,
+      ).then(decodeGeometryIndex, () => null);
+
+      if (decoded && decoded.size > 0) return decoded;
+    }
+    throw new ExternalApiError({
+      service: "busrouter",
+      status: 502,
+      message: "No BusRouter geometry source is currently reachable",
+    });
+  };
+
+const EMPTY_GEOMETRY_INDEX: BusRouterGeometryIndex = new Map();
+
+/** Fall back to stop chords and briefly cache geometry-source failures. */
+const getBusRouterGeometryIndex = async (
+  signal?: AbortSignal,
+): Promise<BusRouterGeometryIndex> => {
+  const recentlyUnavailable = cache.peek<BusRouterGeometryIndex>(
+    "busrouter-geometry-unavailable",
+    BUSROUTER_GEOMETRY_NEGATIVE_TTL_MS,
+  );
+  if (recentlyUnavailable) return recentlyUnavailable;
+
+  try {
+    return await cache.get(
+      "busrouter-geometry-index",
+      BUSROUTER_GEOMETRY_CACHE_TTL_MS,
+      fetchBusRouterGeometryIndex,
+      { signal },
+    );
+  } catch {
+    return cache.get(
+      "busrouter-geometry-unavailable",
+      BUSROUTER_GEOMETRY_NEGATIVE_TTL_MS,
+      async () => EMPTY_GEOMETRY_INDEX,
+      { signal },
+    );
+  }
+};
+
+/**
+ * Pick each direction's road polyline. Directions choose independently: the
+ * score is direction-aware, so one pattern cannot fit both directions of a
+ * service. When BusRouter publishes a pattern for only one direction, the
+ * other direction falls back to that pattern reversed (the same roads, other
+ * carriageway) before falling back to straight stop-to-stop chords.
+ */
+export const matchPatternsToDirections = (
+  patterns: Array<Array<[number, number]>>,
+  directions: Array<{ direction: number; stops: BusRouteStop[] }>,
+): Map<number, PatternFit> => {
+  const result = new Map<number, PatternFit>();
+  if (patterns.length === 0) return result;
+
+  for (const dir of directions) {
+    const fit =
+      bestFit(patterns, dir.stops) ??
+      bestFit(
+        patterns.map((pattern) => [...pattern].reverse()),
+        dir.stops,
+      );
+    if (fit) result.set(dir.direction, fit);
+  }
+
+  return result;
+};
+
+/**
+ * A bus at the selected stop only travels one way, so keep just the
+ * direction(s) that continue on from it. A direction the stop only ends
+ * (a terminus shared with the other direction's start) is dropped. Without
+ * a selected stop on any direction, every direction is kept.
+ */
+export const directionsLeavingStop = <
+  D extends {
+    readonly selectedStopIndex: number | null;
+    readonly stops: ReadonlyArray<unknown>;
+  },
+>(
+  directions: ReadonlyArray<D>,
+): ReadonlyArray<D> => {
+  const serving = directions.filter((dir) => dir.selectedStopIndex !== null);
+  const departing = serving.filter(
+    (dir) => dir.selectedStopIndex! < dir.stops.length - 1,
+  );
+  if (departing.length > 0) return departing;
+  return serving.length > 0 ? serving : directions;
+};
+
+// ---------- Route assembly ----------
+
+const findCaseInsensitiveKey = (
+  index: Map<string, unknown>,
+  serviceNo: string,
+): string | null => {
+  const lower = serviceNo.toLowerCase();
+  for (const key of index.keys()) {
+    if (key.toLowerCase() === lower) return key;
+  }
+  return null;
+};
+
+export const getBusRoute = async (
+  serviceNo: string,
+  stopId?: string,
+  signal?: AbortSignal,
+): Promise<BusRouteResponse> => {
+  const normalizedService = serviceNo.trim();
+  const index = await getBusRoutesIndex(signal);
+
+  // LTA service numbers are case-sensitive in practice for letter
+  // suffixes (e.g. 12e). Try exact match first, then case-insensitive.
+  let serviceKey = normalizedService;
+  let directionsMap = index.get(normalizedService) ?? null;
+  if (!directionsMap) {
+    const matched = findCaseInsensitiveKey(index, normalizedService);
+    if (matched !== null) {
+      serviceKey = matched;
+      directionsMap = index.get(matched) ?? null;
+    }
+  }
+
+  if (!directionsMap || directionsMap.size === 0) {
+    throw new ExternalApiError({
+      service: "lta",
+      status: 404,
+      message: `Bus service ${normalizedService} was not found`,
+    });
+  }
+
+  const stopsCatalog = await getBusStops(signal);
+  const stopByCode = new Map(
+    stopsCatalog.map((stop) => [stop.BusStopCode, stop]),
+  );
+
+  const contextStopId = stopId?.trim() || null;
+
+  const draft = [...directionsMap.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([direction, indexedStops]) => {
+      const joined: BusRouteStop[] = [];
+      for (const entry of indexedStops) {
+        const stop = stopByCode.get(entry.busStopCode);
+        if (
+          !stop ||
+          !Number.isFinite(stop.Latitude) ||
+          !Number.isFinite(stop.Longitude)
+        ) {
+          continue;
+        }
+        joined.push({
+          busStopCode: entry.busStopCode,
+          description: stop.Description,
+          latitude: stop.Latitude,
+          longitude: stop.Longitude,
+          stopSequence: entry.stopSequence,
+        });
+      }
+
+      let selectedStopIndex: number | null = null;
+      if (contextStopId) {
+        const idx = joined.findIndex((s) => s.busStopCode === contextStopId);
+        if (idx >= 0) {
+          selectedStopIndex = idx;
+        }
+      }
+
+      const originCode =
+        joined[0]?.busStopCode ?? indexedStops[0]?.busStopCode ?? "";
+      const destinationCode =
+        joined[joined.length - 1]?.busStopCode ??
+        indexedStops[indexedStops.length - 1]?.busStopCode ??
+        "";
+
+      return {
+        direction,
+        selectedStopIndex,
+        originCode,
+        destinationCode,
+        stops: joined,
+      };
+    })
+    .filter((dir) => dir.stops.length >= 2);
+
+  if (draft.length === 0) {
+    throw new ExternalApiError({
+      service: "lta",
+      status: 404,
+      message: `Bus service ${serviceKey} has no mappable stops`,
+    });
+  }
+
+  const shownDirections = directionsLeavingStop(draft);
+
+  // Prefer a direction only when the context stop appears on exactly one.
+  const matchingDirections = shownDirections
+    .filter((dir) => dir.selectedStopIndex !== null)
+    .map((dir) => dir.direction);
+  const preferredDir =
+    matchingDirections.length === 1 ? matchingDirections[0] : null;
+
+  // Attach road-following geometry when BusRouter data is available.
+  const geometryIndex = await getBusRouterGeometryIndex(signal);
+  let patterns =
+    geometryIndex.get(serviceKey) ??
+    geometryIndex.get(normalizedService) ??
+    null;
+  if (!patterns) {
+    const geometryKey = findCaseInsensitiveKey(geometryIndex, serviceKey);
+    if (geometryKey !== null) {
+      patterns = geometryIndex.get(geometryKey) ?? null;
+    }
+  }
+  const pathByDirection = matchPatternsToDirections(
+    patterns ?? [],
+    shownDirections.map((d) => ({ direction: d.direction, stops: d.stops })),
+  );
+
+  const directions: BusRouteDirection[] = shownDirections.map((dir) => {
+    const fit = pathByDirection.get(dir.direction);
+    const path = fit?.path ?? [];
+    // Same in-order projection used for matching, so the remaining-route
+    // slice starts on the pass of the road the selected stop is actually on.
+    const selectedPathIndex =
+      fit && dir.selectedStopIndex !== null
+        ? (fit.stopSegments[dir.selectedStopIndex] ?? null)
+        : null;
+
+    return {
+      direction: dir.direction,
+      selectedStopIndex: dir.selectedStopIndex,
+      originCode: dir.originCode,
+      destinationCode: dir.destinationCode,
+      stops: dir.stops,
+      preferred: preferredDir !== null && dir.direction === preferredDir,
+      path,
+      selectedPathIndex,
+    };
+  });
+
+  return { serviceNo: serviceKey, directions };
+};

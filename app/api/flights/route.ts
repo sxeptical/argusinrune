@@ -1,0 +1,12 @@
+import { getFlights } from "@/lib/api-clients";
+import { FLIGHTS_ENABLED } from "@/lib/features";
+import { handle } from "@/lib/route-utils";
+
+export async function GET(request: Request) {
+  return handle(
+    request,
+    "flights",
+    { maxRequests: 60, serviceLabel: "Flight data" },
+    (signal) => (FLIGHTS_ENABLED ? getFlights(signal) : []),
+  );
+}

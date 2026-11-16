@@ -1,0 +1,253 @@
+/**
+ * Merges Singapore RSS feeds with bounded, abortable downloads. Individual
+ * feed failures are tolerated; the source fails when every feed fails.
+ */
+import { cache } from "@/lib/cache";
+import { ExternalApiError } from "@/lib/errors";
+import type { NewsItem } from "@/types";
+import { withTimeout } from "./http";
+
+const RSS_TIMEOUT_MS = 10_000;
+const MAX_RSS_BYTES = 512 * 1024;
+const SAFE_URL_RE = /^https?:\/\//i;
+
+const rssFeeds: ReadonlyArray<{ readonly source: string; readonly url: string }> = [
+  {
+    source: "The Straits Times",
+    url: "https://www.straitstimes.com/news/singapore/rss.xml",
+  },
+  {
+    source: "CNA",
+    // Global feed — Singapore relevance is filtered in getNews by URL path.
+    url: "https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml",
+  },
+];
+
+// ---------- RSS parsing ----------
+
+const HTML_ENTITY_MAP: Record<string, string> = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: " ",
+  rsquo: "’",
+  lsquo: "‘",
+  rdquo: "”",
+  ldquo: "“",
+  ndash: "–",
+  mdash: "—",
+  hellip: "…",
+};
+
+export const decodeHtmlEntities = (text: string): string =>
+  text
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+    .replace(/&(#\d+|#x[0-9a-f]+|[a-z]+);/gi, (match, entity: string) => {
+      if (entity.startsWith("#")) {
+        const code =
+          entity[1].toLowerCase() === "x"
+            ? parseInt(entity.slice(2), 16)
+            : parseInt(entity.slice(1), 10);
+        if (!Number.isFinite(code)) return match;
+        try {
+          return String.fromCodePoint(code);
+        } catch {
+          return match;
+        }
+      }
+      const mapped = HTML_ENTITY_MAP[entity.toLowerCase()];
+      return mapped ?? match;
+    });
+
+const stripHtmlTags = (text: string): string =>
+  text.replace(/<[^>]*>/g, "").trim();
+
+export const extractRssTag = (xml: string, tag: string): string => {
+  // Tolerate attributes and namespaces: <title>, <title attr>, <dc:title>.
+  const pattern = new RegExp(
+    `<(?:\\w+:)?${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\/(?:\\w+:)?${tag}>`,
+    "i",
+  );
+  const match = xml.match(pattern);
+  if (!match?.[1]) {
+    // Atom-style self-closed link: <link href="https://…" />
+    if (tag.toLowerCase() === "link") {
+      const href = xml.match(/<link[^>]*href=["']([^"']+)["']/i);
+      if (href?.[1]) return decodeHtmlEntities(href[1]).trim();
+    }
+    return "";
+  }
+  return stripHtmlTags(decodeHtmlEntities(match[1])).trim();
+};
+
+export const extractRssCategories = (xml: string): string[] => {
+  const out: string[] = [];
+  const re = /<(?:\w+:)?category(?:\s[^>]*)?>([\s\S]*?)<\/(?:\w+:)?category>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(xml)) !== null) {
+    const value = stripHtmlTags(decodeHtmlEntities(m[1])).trim();
+    if (value) out.push(value);
+  }
+  return out;
+};
+
+const toIsoDate = (value: string): string => {
+  const timestamp = value ? Date.parse(value) : Date.now();
+  return new Date(
+    Number.isFinite(timestamp) ? timestamp : Date.now(),
+  ).toISOString();
+};
+
+export type ParsedRssItem = NewsItem & { categories: string[] };
+
+export const parseRssItems = (
+  xml: string,
+  source: string,
+): ParsedRssItem[] => {
+  // Support both RSS <item> and Atom <entry>.
+  const itemMatches =
+    xml.match(/<(?:item|entry)(?:\s[^>]*)?>([\s\S]*?)<\/(?:item|entry)>/gi) ??
+    [];
+  return itemMatches
+    .map((rawItem) => {
+      const title = extractRssTag(rawItem, "title");
+      const link =
+        extractRssTag(rawItem, "link") || extractRssTag(rawItem, "guid");
+      const publishedAt =
+        extractRssTag(rawItem, "pubDate") ||
+        extractRssTag(rawItem, "pubdate") ||
+        extractRssTag(rawItem, "updated") ||
+        extractRssTag(rawItem, "published") ||
+        extractRssTag(rawItem, "date");
+      const categories = extractRssCategories(rawItem);
+
+      if (!title || !link) return null;
+      if (!SAFE_URL_RE.test(link)) return null;
+
+      return {
+        title,
+        source,
+        url: link,
+        publishedAt: toIsoDate(publishedAt),
+        categories,
+      } satisfies ParsedRssItem;
+    })
+    .filter((item): item is ParsedRssItem => item !== null);
+};
+
+/** CNA publishes a global feed — keep items with any Singapore signal. */
+export const isSingaporeRelevant = (item: ParsedRssItem): boolean => {
+  if (item.source !== "CNA") return true;
+  const urlHit = item.url.toLowerCase().includes("singapore");
+  if (urlHit) return true;
+  if (item.title.toLowerCase().includes("singapore")) return true;
+  return item.categories.some((c) => c.toLowerCase().includes("singapore"));
+};
+
+// ---------- Bounded, abortable feed fetch ----------
+
+/**
+ * Read a response body with a hard byte cap, cancelling the stream as soon
+ * as the cap is exceeded. Returns `null` when the feed is too large.
+ */
+async function readBodyWithLimit(
+  response: Response,
+  maxBytes: number,
+): Promise<string | null> {
+  const body = response.body;
+  if (!body) {
+    const text = await response.text();
+    return new TextEncoder().encode(text).byteLength > maxBytes ? null : text;
+  }
+
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let received = 0;
+  let text = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    received += value.byteLength;
+    if (received > maxBytes) {
+      await reader.cancel();
+      return null;
+    }
+    text += decoder.decode(value, { stream: true });
+  }
+  return text + decoder.decode();
+}
+
+async function fetchRssBody(
+  url: string,
+  maxBytes: number,
+  signal?: AbortSignal,
+): Promise<string | null> {
+  const response = await fetch(url, { cache: "no-store", signal });
+  if (!response.ok) {
+    await response.body?.cancel().catch(() => undefined);
+    throw new Error(`HTTP ${response.status} for ${url}`);
+  }
+  const declaredBytes = Number(response.headers.get("content-length") ?? "");
+  if (Number.isFinite(declaredBytes) && declaredBytes > maxBytes) {
+    await response.body?.cancel().catch(() => undefined);
+    return null;
+  }
+  return readBodyWithLimit(response, maxBytes);
+}
+
+const fetchRssText = async (url: string): Promise<string> => {
+  const text = await withTimeout("rss", RSS_TIMEOUT_MS, (signal) =>
+    fetchRssBody(url, MAX_RSS_BYTES, signal),
+  );
+  if (text === null) {
+    throw new Error(`RSS feed exceeded ${MAX_RSS_BYTES} bytes: ${url}`);
+  }
+  return text;
+};
+
+// ---------- Public client ----------
+
+export const getNews = (signal?: AbortSignal): Promise<NewsItem[]> =>
+  cache.get(
+    "news",
+    15 * 60 * 1000,
+    async () => {
+      // Feeds fail independently; only all of them failing is an error.
+      const results = await Promise.allSettled(
+        rssFeeds.map(async (feed) =>
+          parseRssItems(await fetchRssText(feed.url), feed.source),
+        ),
+      );
+      const succeeded = results.flatMap((result) =>
+        result.status === "fulfilled" ? [result.value] : [],
+      );
+      if (succeeded.length === 0) {
+        throw new ExternalApiError({
+          service: "rss",
+          status: 502,
+          message: "All news feeds failed",
+        });
+      }
+
+      const seen = new Set<string>();
+      return succeeded
+        .flat()
+        .filter(isSingaporeRelevant)
+        .filter((item) => {
+          if (seen.has(item.url)) return false;
+          seen.add(item.url);
+          return true;
+        })
+        .map((item) => ({
+          title: item.title,
+          source: item.source,
+          url: item.url,
+          publishedAt: item.publishedAt,
+        }))
+        .sort((a, b) => +new Date(b.publishedAt) - +new Date(a.publishedAt))
+        .slice(0, 20);
+    },
+    { signal, shared: true },
+  );

@@ -1,0 +1,189 @@
+"use client";
+
+import { Fragment, type Dispatch, type SetStateAction } from "react";
+import FlightPanel from "@/app/components/FlightPanel";
+import WeatherPanel from "@/app/components/WeatherPanel";
+import {
+  EyeGlyph,
+  LayerFilterInput,
+  LayerGroupHeader,
+  LayerOptionFilter,
+} from "@/app/components/dashboard/LayerControls";
+import { IntelPanel } from "@/app/components/dashboard/IntelPanel";
+import { useLayerList } from "@/app/hooks/use-layer-list";
+import type {
+  SensorRow,
+  SensorStatsRow,
+} from "@/app/hooks/use-dashboard-state";
+import type { SensorKey } from "@/lib/layers";
+import { FLIGHTS_ENABLED } from "@/lib/features";
+import type {
+  FlightState,
+  AirQualityOverlay,
+  WeatherData,
+  WeatherHistoryPoint,
+} from "@/types";
+
+export function LayersSidebar({
+  flights,
+  selectedFlight,
+  sensorRows,
+  sensorStatsRows,
+  sensorVisibility,
+  setSelectedFlight,
+  setSensorVisibility,
+  visibleSensorCount,
+  weather,
+  weatherHistory,
+  onAirQualityOverlayChange,
+}: {
+  flights: FlightState[];
+  selectedFlight: FlightState | null;
+  sensorRows: ReadonlyArray<SensorRow>;
+  sensorStatsRows: ReadonlyArray<SensorStatsRow>;
+  sensorVisibility: Record<SensorKey, boolean>;
+  setSelectedFlight: (flight: FlightState) => void;
+  setSensorVisibility: Dispatch<SetStateAction<Record<SensorKey, boolean>>>;
+  visibleSensorCount: number;
+  weather: WeatherData;
+  weatherHistory: WeatherHistoryPoint[];
+  onAirQualityOverlayChange?: (overlay: AirQualityOverlay | null) => void;
+}) {
+  const {
+    groups,
+    filter,
+    setFilter,
+    filterActive,
+    isGroupCollapsed,
+    toggleGroupCollapsed,
+    toggleGroupVisibility,
+  } = useLayerList({
+    rows: sensorRows,
+    visibility: sensorVisibility,
+    setVisibility: setSensorVisibility,
+  });
+
+  return (
+    // `xl:overflow-hidden` + a capped Weather panel keep Weather visible at
+    // the bottom of the viewport while the Layers list scrolls internally.
+    <aside className="order-4 flex min-w-0 flex-col gap-2 sm:gap-3 xl:order-1 xl:min-h-0 xl:overflow-hidden">
+      <IntelPanel
+        title="Layers"
+        badge={`${visibleSensorCount}/${sensorRows.length}`}
+        className="xl:flex xl:min-h-0 xl:flex-1 xl:flex-col xl:overflow-hidden"
+        contentClassName="space-y-2 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:pr-1"
+        headerContent={
+          // Layer controls live in the map drawer below xl, so the filter
+          // is desktop-only; the stat summary below still shows everywhere.
+          <span className="block max-xl:hidden">
+            <LayerFilterInput value={filter} onChange={setFilter} />
+          </span>
+        }
+      >
+        <div className="max-xl:hidden space-y-2">
+          {groups.map((group) => (
+              <div key={group.id}>
+                <LayerGroupHeader
+                  label={group.label}
+                  visibleCount={group.visibleCount}
+                  totalCount={group.rows.length}
+                  collapsed={isGroupCollapsed(group.id)}
+                  anyVisible={group.visibleCount > 0}
+                  onToggleCollapsed={() => toggleGroupCollapsed(group.id)}
+                  onToggleVisible={() => toggleGroupVisibility(group.id)}
+                />
+                {isGroupCollapsed(group.id) ? null : (
+                  <div className="space-y-1 pt-1">
+                    {group.rows.map((row) => (
+                      <Fragment key={row.key}>
+                      <div
+                        className="data-row flex items-center justify-between gap-3 px-2.5 py-2"
+                      >
+                        <div className="min-w-0">
+                          <div className="truncate text-xs text-ink">
+                            {row.label}
+                          </div>
+                          <div className="data-label truncate">{row.note}</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSensorVisibility((previous) => ({
+                                ...previous,
+                                [row.key]: !previous[row.key],
+                              }))
+                            }
+                            aria-label={`${sensorVisibility[row.key] ? "Hide" : "Show"} ${row.label}`}
+                            title={`${sensorVisibility[row.key] ? "Hide" : "Show"} ${row.label}`}
+                            aria-pressed={sensorVisibility[row.key]}
+                            className={`grid h-6 w-6 shrink-0 place-items-center rounded-full border transition-colors duration-150 ${
+                              sensorVisibility[row.key]
+                                ? "border-success/45 bg-success/8 text-success hover:bg-success/12"
+                                : "border-line bg-paper text-muted hover:border-line-strong hover:text-ink"
+                            }`}
+                          >
+                            <EyeGlyph visible={sensorVisibility[row.key]} />
+                          </button>
+                          <div
+                            className={`min-w-7 text-right font-mono text-sm font-medium ${row.tone}`}
+                          >
+                            {row.value}
+                          </div>
+                        </div>
+                      </div>
+                      {row.filter && sensorVisibility[row.key] ? (
+                        <LayerOptionFilter
+                          summaryLabel={row.filter.label}
+                          options={row.filter.options}
+                          selected={row.filter.selected}
+                          onChange={row.filter.onChange}
+                          accentClass={row.dot}
+                        />
+                      ) : null}
+                      </Fragment>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+            {filterActive && groups.length === 0 ? (
+              <div className="px-2.5 py-3 text-[10px] uppercase tracking-[0.1em] text-muted">
+                No layers match
+              </div>
+            ) : null}
+          </div>
+          <div className="space-y-1">
+            {sensorStatsRows.map((row) => (
+              <div
+                key={row.label}
+                className="flex items-center justify-between gap-3 border-b border-line px-2.5 py-2 last:border-b-0"
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-xs text-ink">{row.label}</div>
+                  <div className="data-label truncate">{row.note}</div>
+                </div>
+                <div className={`font-mono text-sm font-medium ${row.tone}`}>
+                  {row.value}
+                </div>
+              </div>
+            ))}
+          </div>
+      </IntelPanel>
+
+      <WeatherPanel
+        weather={weather}
+        history={weatherHistory}
+        onAirQualityOverlayChange={onAirQualityOverlayChange}
+        className="xl:max-h-[38%] xl:min-h-0 xl:shrink-0"
+      />
+      {FLIGHTS_ENABLED ? (
+        <FlightPanel
+          flights={flights}
+          selectedFlight={selectedFlight}
+          onSelectFlight={setSelectedFlight}
+        />
+      ) : null}
+    </aside>
+  );
+}
