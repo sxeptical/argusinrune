@@ -103,7 +103,7 @@ const hawkers = (JSON.parse(await readFile("data/amenities.json", "utf8"))).hawk
 if (!hawkers.length) throw new Error("data/amenities.json has no hawkers; run fetch-amenities.mjs first");
 const hawkerByName = new Map(hawkers.map((hawker) => [normalizeName(hawker.name), hawker]));
 
-const poll = await fetchJson(`https://api-open.data.gov.sg/v1/data/api/datasets/${CLOSURE_DATASET}/poll-download`);
+const poll = await fetchJson(`https://api-open.data.gov.sg/v1/public/api/datasets/${CLOSURE_DATASET}/poll-download`);
 const url = poll?.data?.url;
 if (!url) throw new Error(`No presigned URL returned for ${CLOSURE_DATASET}`);
 const rows = parseCsv(await fetchText(url));

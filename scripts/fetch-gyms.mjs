@@ -303,7 +303,7 @@ const keepsSportsgVenue = (venue) =>
   (defaultSportsgVenue(venue) || Object.hasOwn(SPORTSG_ADDITIONAL_GYM_VENUES, venue));
 
 async function fetchSportsg() {
-  const poll = await fetchJson(`https://api-open.data.gov.sg/v1/data/api/datasets/${SPORTSG_DATASET}/poll-download`);
+  const poll = await fetchJson(`https://api-open.data.gov.sg/v1/public/api/datasets/${SPORTSG_DATASET}/poll-download`);
   const url = poll?.data?.url;
   if (!url) throw new Error(`No presigned URL returned for ${SPORTSG_DATASET}`);
   const data = await fetchJson(url, { headers: { "User-Agent": USER_AGENT } });

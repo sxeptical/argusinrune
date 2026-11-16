@@ -39,7 +39,7 @@ const composeAddress = (p) => {
   return base ? `${base}${postcode ? `, Singapore ${postcode}` : ""}` : postcode ? `Singapore ${postcode}` : null;
 };
 
-const poll = await fetchJson(`https://api-open.data.gov.sg/v1/data/api/datasets/${CHAS_DATASET}/poll-download`);
+const poll = await fetchJson(`https://api-open.data.gov.sg/v1/public/api/datasets/${CHAS_DATASET}/poll-download`);
 const url = poll?.data?.url;
 if (!url) throw new Error(`No presigned URL returned for ${CHAS_DATASET}`);
 const data = await fetchJson(url, { headers: { "User-Agent": USER_AGENT } });

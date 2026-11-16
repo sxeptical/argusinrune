@@ -89,7 +89,7 @@ const parseCsv = (csv) => {
   return rows;
 };
 
-const poll = await fetchJson(`https://api-open.data.gov.sg/v1/data/api/datasets/${MOE_DATASET}/poll-download`);
+const poll = await fetchJson(`https://api-open.data.gov.sg/v1/public/api/datasets/${MOE_DATASET}/poll-download`);
 const url = poll?.data?.url;
 if (!url) throw new Error(`No presigned URL returned for ${MOE_DATASET}`);
 const csvResponse = await fetch(url, { headers: { "User-Agent": USER_AGENT } });

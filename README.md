@@ -138,6 +138,16 @@ node scripts/fetch-gyms.mjs
 node scripts/apply-photo-picks.mjs       # reapply reviewed picks without refetching
 ```
 
+Data.gov.sg downloads use the public poll-then-download API
+(`https://api-open.data.gov.sg/v1/public/api/datasets/{datasetId}/poll-download`,
+which returns a presigned S3 URL). The older `/v1/data/api/` path was retired
+and now returns HTTP 404; the dataset ids themselves did not change. The API
+rate-limits polling to roughly 2 requests per 10 seconds (HTTP 429 with a
+"try again in 10 seconds" message), so scripts that poll more than one dataset
+pace their calls (and the shared `fetchJson` helper retries 429/5xx with
+backoff). The two CSV datasets (MOE schools, NEA hawker closures) are parsed as
+CSV; the rest are GeoJSON/KML.
+
 Upstream/download failures are reported per script (HTTP errors mean an
 upstream URL or dataset id needs refreshing); the checked-in bundles are
 committed so the app works without running these. The reviewed photo picks live

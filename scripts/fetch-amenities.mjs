@@ -28,7 +28,7 @@ const WIKIDATA_HAWKER_CLASS = "Q863425";
 const NEA_PHOTO_URL_RE = /^https?:\/\/www\.nea\.gov\.sg\/.+\.(?:jpe?g|png)$/i;
 
 async function fetchHawkers() {
-  const poll = await fetchJson(`https://api-open.data.gov.sg/v1/data/api/datasets/${HAWKER_DATASET}/poll-download`);
+  const poll = await fetchJson(`https://api-open.data.gov.sg/v1/public/api/datasets/${HAWKER_DATASET}/poll-download`);
   const url = poll?.data?.url;
   if (!url) throw new Error(`No presigned URL returned for ${HAWKER_DATASET}`);
   const data = await fetchJson(url);

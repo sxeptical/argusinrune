@@ -67,7 +67,7 @@ const applyCoordFix = (site) => {
 };
 
 async function fetchNhb(dataset, kind, idKey) {
-  const poll = await fetchJson(`https://api-open.data.gov.sg/v1/data/api/datasets/${dataset}/poll-download`);
+  const poll = await fetchJson(`https://api-open.data.gov.sg/v1/public/api/datasets/${dataset}/poll-download`);
   const url = poll?.data?.url;
   if (!url) throw new Error(`No presigned URL returned for ${dataset}`);
   const data = await fetchJson(url, { headers: { "User-Agent": USER_AGENT } });
