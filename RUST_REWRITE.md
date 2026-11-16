@@ -325,3 +325,81 @@ Limitations: no smooth camera spring (moves are instant), no label rendering ins
 `Shape` (cluster counts use separate `text` Els), vector tiles are not decoded, and
 the radius circle is an equirectangular approximation (accurate over Singapore-scale
 radii only).
+
+## argus-core API (Phase 2)
+
+`crates/argus-core` is the shared domain crate (serde + serde_json only, no UI and no
+network deps). It ports `types/index.ts`, `types/schemas.ts`, the pure parts of
+`lib/`, and the non-React computation in `app/hooks/`. All modules are public from
+`argus_core::*`.
+
+### Module map (TS → Rust)
+
+| Rust module | TypeScript source |
+| --- | --- |
+| `types` | `types/index.ts` — all domain types (`WeatherData`, `HawkerCentre`, `Gym`, `School`, `MrtGeoJson`, `ParksGeoJson`, bus contracts, `MapSearchResult`, …). serde renames match `public/*.json` camelCase and upstream PascalCase. |
+| `api_types` | `types/schemas.ts` — external API response shapes (LTA, Data.gov v1/v2, Aviationstack, OpenSky). `NumberOrString`, wrapper unions, `LtaTrafficImagesResponse::into_cameras`. |
+| `geo` | `lib/geo-filter.ts` — `GeoFilter`, `distance_m`, `geometry_touches_radius`, `clip_line_to_radius`, `clip_geometry_to_radius`, `within_radius`, `build_geo_filter_{circle,mask}_geojson`, `format_radius`. |
+| `mrt_network` | `lib/mrt-network.ts` — operational/LRT/future station lists, `display_stations`, `lta_line_display_name`. |
+| `mrt_routing` | `lib/mrt-routing.ts` — `MrtRoutePlan`, `MrtRouteSegment`, Dijkstra `plan_mrt_route`, `is_routeable_mrt_station`, `MRT_STATION_NAMES`. |
+| `geometry` | `lib/map-geometry.ts` + `lib/map-features.ts` — bus-route/MRT GeoJSON builders, `interpolate_stations`, `build_mrt_station_geojson`, `route_station_keys`, `build_route_geojson`. |
+| `format` | `lib/formatters.ts` — `format_sg_time`, `format_sg_date_time`, `singapore_today`/`singapore_date_for` (fixed UTC+8, no tz crate), `format_speed_kmh`, `format_altitude_feet`, `group_thousands`. |
+| `signals` | `lib/signals.ts` + pure `lib/notifications.ts` — `SignalRow`, `build_signal_digest`, `diff_signals`, `select_notifiable`, `merge_active_signals`, `build_browser_notifications`. |
+| `air_quality` | `lib/air-quality.ts` — PSI/PM2.5 bands and tones. |
+| `mobility` | `lib/mobility.ts` — carpark/EV tones and popup lines, `PopupLine`, `AvailabilityTone`. |
+| `maps_links` | `lib/maps-links.ts` — `google_maps_url`, `format_coordinates`. |
+| `bundle_validation` | `lib/bundle-validation.ts` — `is_place`, `is_addressed_place`, `is_photo_list`, URL/one-of checks. |
+| `data` | `lib/data/*` + `lib/park-photos.ts` — `DataDir`, `StaticData::load`, all `validate_*` fns, `photos_for_park`, `park_labels`. |
+| `amenities` | `lib/amenities.ts` — mall/hawker popups, `photo_credit`, `format_opening_hours`, `format_closure_range`, `describe_hawker_closure`. |
+| `popups` | `lib/{gyms,schools,heritage,healthcare,hotels,libraries,pharmacies,supermarkets,community-clubs}.ts` — label maps + `describe_*` popup line builders. |
+| `amenity_layers` | `lib/amenity-layers.ts` — `AmenityRegistry` (11 types), sub-filter choices, `parse_amenity_filters`, deterministic collision `display_coords`, `find`/`co_located`, search results. |
+| `parks` | `lib/parks.ts` — `format_park_name`, `area_hectares`, `park_label_point`, `describe_park_feature`, `build_park_search_results`. |
+| `mall_stores` | `lib/mall-stores.ts` — `normalize_unit`/`normalize_level`/`normalize_website`, `clean_store_row`, `match_store_list_mall`, grouping/sorting/filtering. |
+| `layers` | `lib/layers.ts` + `buildLayerGroups` from `app/hooks/use-layer-list.ts` — layer registry, `toggle_layer_option_selection`, `build_layer_groups`. |
+| `search` | `lib/map-search.ts` — bus-stop/MRT search results + `rank_results`. |
+| `preferences` | `lib/ui-preferences.ts` + `lib/local-history.ts` (pure merge) — pref parsers, `merge_point_lists`, `merge_point_stores`. |
+| `flights` | `lib/flights.ts` — `summarize_flights`. |
+| `model` | Phase 1 `Layer` skeleton (kept for compatibility). |
+
+### Data-loading approach
+
+Paths are resolved against a **configurable `DataDir`** (not `include_bytes!`):
+
+```rust,ignore
+let dir = argus_core::data::DataDir::default(); // $ARGUS_DATA_DIR or <crate>/../../public
+let data = argus_core::data::StaticData::load(&dir)?;
+```
+
+`DataDir::new(path)` points at any bundle directory. Every bundle is validated on
+load (mirroring the TS `validate*Bundle` refinements — ISO dates, enum membership,
+host-allowlisted photos, unique ids, closure join consistency), then deserialised.
+`StaticData` pre-processes NParks names, computes park areas/labels and joins hawker
+closures. `StaticData::load_mall_store_list(&dir, id)` loads a per-mall directory.
+
+### Key types/fns UI + data phases should use
+
+- `types::{WeatherData, SignalRow, FlightState, MrtGeoJson, MapSearchResult, …}`.
+- `data::{StaticData, DataDir}` for all static bundles; `amenity_layers::AmenityRegistry::new(&data)`.
+- `geo::{GeoFilter, distance_m, clip_geometry_to_radius, build_geo_filter_circle_geojson}`.
+- `mrt_routing::{plan_mrt_route, is_routeable_mrt_station}`; `geometry::{build_route_geojson, …}`.
+- `signals::{build_signal_digest, diff_signals, select_notifiable, merge_active_signals}`.
+- `layers::{LAYERS, default_sensor_visibility, build_layer_groups}`.
+
+### Skipped TypeScript modules/tests (intentionally out of Phase 2 scope)
+
+Network / platform / React / authoring only: `lib/api-clients/*`, `lib/api-fetch.ts`,
+`lib/errors.ts`, `lib/rate-limit.ts`, `lib/shared-rate-limit.ts`, `lib/route-utils.ts`,
+`lib/csp.ts`, `lib/cache*.ts`, `lib/feedback*.ts`, `lib/visitor-country.ts`,
+`lib/features.ts`, `lib/local-history.ts` storage primitives (only pure merges ported),
+and browser-notification API calls in `lib/notifications.ts`. Corresponding skipped
+tests: `tests/api-*`, `tests/cache*`, `tests/{rate-limit,shared-rate-limit}.test.ts`,
+`tests/{csp,feedback,api-fetch,route-utils,version,ui-*}.test.ts`, `tests/version.test.ts`,
+`tests/place-fields.test.ts` and `tests/place-photos.test.ts` (both cover
+`scripts/lib/*.mjs`, authoring-time helpers, not `lib/`), plus the React-markup
+assertions in `tests/layers.test.tsx` (its pure `buildLayerGroups`/toggle logic is ported).
+
+### Verification (Phase 2)
+
+- `cargo test -p argus-core`: **67 passed** (58 inline unit tests + 9 integration
+  tests in `tests/port_tests.rs`), 0 failed.
+- `cargo build --workspace`: green.
